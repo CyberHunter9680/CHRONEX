@@ -1,0 +1,44 @@
+[
+  {
+    "entity_type": "UPI ID",
+    "entity_value": "securepay.mule@okaxis",
+    "risk_score": "Critical",
+    "details": "Extracted from WhatsApp Signal logs, Telegram task sheets, and GPay loan app receipts. Multi-case correlation bridge."
+  },
+  {
+    "entity_type": "Mobile Number",
+    "entity_value": "+91 91234 56789",
+    "risk_score": "High",
+    "details": "Forensic contact linked with Case CX-2026-0401. VIP Crypto Signal recruiter."
+  },
+  {
+    "entity_type": "Mobile Number",
+    "entity_value": "+91 98989 89898",
+    "risk_score": "High",
+    "details": "Linked with Case CX-2026-0402. Telegram recruitment contact."
+  },
+  {
+    "entity_type": "Transaction ID",
+    "entity_value": "982374829384",
+    "risk_score": "Medium",
+    "details": "VIP Signal payment transfer reference."
+  },
+  {
+    "entity_type": "Transaction ID",
+    "entity_value": "827364829103",
+    "risk_score": "Medium",
+    "details": "QuickCash extortion payment reference."
+  },
+  {
+    "entity_type": "Bank Account Number",
+    "entity_value": "918273645029",
+    "risk_score": "High",
+    "details": "Mule bank account linked to QuickCash app transfers."
+  },
+  {
+    "entity_type": "IFSC Code",
+    "entity_value": "ICIC0000888",
+    "risk_score": "Low",
+    "details": "ICICI Bank branch code associated with mule accounts."
+  }
+]

@@ -1,0 +1,47 @@
+[
+  {
+    "evidence_id": "E-40101",
+    "entity_id": 1,
+    "case_id": "CX-2026-0401"
+  },
+  {
+    "evidence_id": "E-40201",
+    "entity_id": 1,
+    "case_id": "CX-2026-0402"
+  },
+  {
+    "evidence_id": "E-40301",
+    "entity_id": 1,
+    "case_id": "CX-2026-0403"
+  },
+  {
+    "evidence_id": "E-40101",
+    "entity_id": 2,
+    "case_id": "CX-2026-0401"
+  },
+  {
+    "evidence_id": "E-40101",
+    "entity_id": 4,
+    "case_id": "CX-2026-0401"
+  },
+  {
+    "evidence_id": "E-40201",
+    "entity_id": 3,
+    "case_id": "CX-2026-0402"
+  },
+  {
+    "evidence_id": "E-40301",
+    "entity_id": 5,
+    "case_id": "CX-2026-0403"
+  },
+  {
+    "evidence_id": "E-40301",
+    "entity_id": 6,
+    "case_id": "CX-2026-0403"
+  },
+  {
+    "evidence_id": "E-40301",
+    "entity_id": 7,
+    "case_id": "CX-2026-0403"
+  }
+]

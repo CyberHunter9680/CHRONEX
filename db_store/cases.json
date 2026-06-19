@@ -1,0 +1,89 @@
+[
+  {
+    "id": "CX-2026-0401",
+    "title": "VIP Crypto Investment Fraud Campaign",
+    "description": "Victim was approached via a WhatsApp Group named \"VIP Stock & Crypto Signals\". Conned into transferring ₹1,20,000 to a fraudulent UPI ID under the pretense of high stock returns. Funds were immediately layered to separate mule accounts.",
+    "status": "Under Investigation",
+    "priority": "Critical",
+    "classification": "Investment Scam",
+    "victim_name": "Abhishek Vyas",
+    "victim_age": 34,
+    "victim_phone": "+91 91234 56789",
+    "victim_email": "abhishek.v@gmail.com",
+    "victim_occupation": "Software Engineer",
+    "victim_location": "Noida Sector 62",
+    "remarks": "Initial complaint filed on national cyber portal. Linked with suspicious WhatsApp number and mule UPI. Multi-case correlation analysis pending.",
+    "assigned_officer": "Inspector S. Sharma",
+    "assigned_cell": "Noida Cyber Cell (Zone 1)",
+    "fir_number": "FIR-23/2026",
+    "complaint_number": "CC-9028420-2026",
+    "loss_amount": 120000,
+    "notes": [
+      {
+        "id": "note-seed-1",
+        "timestamp": "2026-06-18T05:42:30.477Z",
+        "officer": "Inspector S. Sharma",
+        "text": "Case registered and secured in SQL store. Initial complaint linked to National Cyber Crime Portal logs."
+      }
+    ],
+    "integrity_hash": "d6b9f2910ab38cda8f2efcde04847e0984da0f2efcb910f2efcd6b910ab38cda"
+  },
+  {
+    "id": "CX-2026-0402",
+    "title": "Telegram Part-Time Task Job Fraud",
+    "description": "Victim was added to a Telegram group and asked to review hotels for payment. Paid small earnings initially, then forced to pay deposit/security charges. Lost ₹45,000 through multiple IMPS and UPI transfers.",
+    "status": "Open",
+    "priority": "High",
+    "classification": "Job Fraud",
+    "victim_name": "Rohan Mehta",
+    "victim_age": 27,
+    "victim_phone": "+91 98989 89898",
+    "victim_email": "rohan.mehta@yahoo.com",
+    "victim_occupation": "Sales Representative",
+    "victim_location": "Greater Noida",
+    "remarks": "Telegram handle @taskmaster_vip identified as recruiter. Request sent to bank for suspect KYC details.",
+    "assigned_officer": "Inspector S. Sharma",
+    "assigned_cell": "Noida Cyber Cell (Zone 1)",
+    "fir_number": "FIR-44/2026",
+    "complaint_number": "CC-8820490-2026",
+    "loss_amount": 45000,
+    "notes": [
+      {
+        "id": "note-seed-2",
+        "timestamp": "2026-06-18T05:42:30.478Z",
+        "officer": "Inspector S. Sharma",
+        "text": "Telegram chats secured. IP tower location traced to VoIP server routing."
+      }
+    ],
+    "integrity_hash": "af20de884da0f2efcb910f2efcd6b910ab38cda8f2efcde04847e0984da0f2e"
+  },
+  {
+    "id": "CX-2026-0403",
+    "title": "Instant Micro-Loan Blackmail Scam",
+    "description": "Victim downloaded a mobile application called \"QuickCash\". The app harvested contact lists and gallery. Victim paid ₹25,000 following extortion calls showing morphed photographs.",
+    "status": "Open",
+    "priority": "Critical",
+    "classification": "Loan App Fraud",
+    "victim_name": "Priya Sharma",
+    "victim_age": 22,
+    "victim_phone": "+91 88888 77777",
+    "victim_email": "priya22@gmail.com",
+    "victim_occupation": "College Student",
+    "victim_location": "Noida Sector 15",
+    "remarks": "App package matches malicious APK signatures. Extortion call received from VoIP number. Bank statement obtained.",
+    "assigned_officer": "Inspector S. Sharma",
+    "assigned_cell": "Noida Cyber Cell (Zone 1)",
+    "fir_number": "FIR-102/2026",
+    "complaint_number": "CC-1120409-2026",
+    "loss_amount": 25000,
+    "notes": [
+      {
+        "id": "note-seed-3",
+        "timestamp": "2026-06-18T05:42:30.478Z",
+        "officer": "Inspector S. Sharma",
+        "text": "Micro-loan APK retrieved. Extortion contacts registered."
+      }
+    ],
+    "integrity_hash": "910ab38cda8f2efcde04847e0984da0f2efcb910f2efcd6b910ab38cda8f2ef"
+  }
+]

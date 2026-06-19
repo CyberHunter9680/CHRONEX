@@ -1,0 +1,17 @@
+[
+  {
+    "id": "A-501",
+    "type": "Duplicate Entity",
+    "severity": "Critical",
+    "title": "Multi-Case UPI ID Match",
+    "description": "UPI credential securepay.mule@okaxis was extracted across multiple evidence files. Strong indicator of organized cyber mule syndicate.",
+    "entity_type": "UPI ID",
+    "entity_value": "securepay.mule@okaxis",
+    "cases": [
+      "CX-2026-0401",
+      "CX-2026-0402",
+      "CX-2026-0403"
+    ],
+    "resolved": false
+  }
+]

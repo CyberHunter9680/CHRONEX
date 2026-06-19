@@ -1,0 +1,30 @@
+[
+  {
+    "case_id": "CX-2026-0401",
+    "timestamp": "2026-06-12T10:15:00Z",
+    "title": "Scam Inception",
+    "description": "Suspect group contact via WhatsApp offering fake crypto signals.",
+    "created_by": "Inspector S. Sharma"
+  },
+  {
+    "case_id": "CX-2026-0401",
+    "timestamp": "2026-06-12T10:20:00Z",
+    "title": "UPI Fraud Transaction",
+    "description": "Victim transfers ₹1,20,000 to UPI ID securepay.mule@okaxis.",
+    "created_by": "Inspector S. Sharma"
+  },
+  {
+    "case_id": "CX-2026-0402",
+    "timestamp": "2026-06-13T18:30:00Z",
+    "title": "Job Task Assignment",
+    "description": "Telegram handle @taskmaster_vip directs victim to deposit money to unlock hotel review tasks.",
+    "created_by": "Inspector S. Sharma"
+  },
+  {
+    "case_id": "CX-2026-0402",
+    "timestamp": "2026-06-13T18:35:00Z",
+    "title": "Second Layer Payment",
+    "description": "Victim transfers deposit of ₹45,000 to UPI ID securepay.mule@okaxis.",
+    "created_by": "Inspector S. Sharma"
+  }
+]
