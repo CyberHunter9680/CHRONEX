@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   FileText, 
   Printer, 
@@ -7,12 +7,30 @@ import {
   Download,
   AlertTriangle,
   UserCheck,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Bot
 } from 'lucide-react';
+import { osintApi } from '../services/api';
 
 export default function ReportGenerator({ cases, evidence, entities, alerts }) {
   const [selectedCaseId, setSelectedCaseId] = useState(cases[0]?.id || '');
   const [execSummary, setExecSummary] = useState('');
+  const [osintHistory, setOsintHistory] = useState([]);
+
+  // Load OSINT logs
+  useEffect(() => {
+    const loadOsint = async () => {
+      try {
+        const res = await osintApi.getHistory();
+        if (res.data?.history) {
+          setOsintHistory(res.data.history);
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    };
+    loadOsint();
+  }, []);
 
   const activeCase = cases.find(c => c.id === selectedCaseId);
 
@@ -22,6 +40,24 @@ export default function ReportGenerator({ cases, evidence, entities, alerts }) {
 
   // Extract all unique entities linked to this case
   const caseEntities = activeCase ? entities.filter(ent => ent.casesLinked.includes(activeCase.id)) : [];
+
+  // Filter and split OSINT findings
+  const caseOsint = osintHistory.filter(item => {
+    const data = typeof item.result_data === 'string' ? JSON.parse(item.result_data) : item.result_data;
+    const isLinkedByEntity = caseEntities.some(ce => ce.value.toLowerCase() === item.entity_value.toLowerCase());
+    const isLinkedByTrace = data?.sources_trace?.some(t => t.case_ref === selectedCaseId);
+    return isLinkedByEntity || isLinkedByTrace;
+  });
+
+  const verifiedOsint = caseOsint.filter(item => {
+    const data = typeof item.result_data === 'string' ? JSON.parse(item.result_data) : item.result_data;
+    return data?.verification_status === 'Verified' && data?.review_status === 'Approved';
+  });
+
+  const unverifiedOsint = caseOsint.filter(item => {
+    const data = typeof item.result_data === 'string' ? JSON.parse(item.result_data) : item.result_data;
+    return data?.verification_status !== 'Verified' || data?.review_status !== 'Approved';
+  });
 
   const handlePrint = () => {
     window.print();
@@ -264,6 +300,64 @@ export default function ReportGenerator({ cases, evidence, entities, alerts }) {
               </div>
             </div>
           )}
+
+          {/* Section 6: Verified OSINT Findings */}
+          <div style={{ marginBottom: '24px', pageBreakInside: 'avoid' }}>
+            <h3 style={{ fontSize: '1rem', fontWeight: 800, borderBottom: '1px solid #0f172a', paddingBottom: '4px', marginBottom: '10px', textTransform: 'uppercase' }}>
+              6. Verified OSINT Intelligence Findings
+            </h3>
+            {verifiedOsint.length > 0 ? (
+              <div style={{ border: '1px solid #10b981', borderRadius: '4px', padding: '12px', fontSize: '0.8rem', backgroundColor: '#f0fdf4' }}>
+                {verifiedOsint.map(item => {
+                  const data = typeof item.result_data === 'string' ? JSON.parse(item.result_data) : item.result_data;
+                  return (
+                    <div key={item.id} style={{ marginBottom: '10px', borderBottom: '1px solid #e2e8f0', paddingBottom: '6px' }}>
+                      <div><strong>[{item.query_type}] Target:</strong> <code style={{ fontSize: '0.85rem' }}>{item.entity_value}</code></div>
+                      <div style={{ marginTop: '2px', color: '#1e293b' }}>
+                        Source: {data.source_name} • Confidence: {data.confidence_score}% (Verified Status)
+                      </div>
+                      {data.recommendation && (
+                        <div style={{ fontStyle: 'italic', marginTop: '2px', color: '#047857' }}>
+                          Directive: {data.recommendation}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p style={{ fontSize: '0.85rem', color: '#64748b', fontStyle: 'italic' }}>No verified OSINT findings approved for this dossier.</p>
+            )}
+          </div>
+
+          {/* Section 7: Unverified leads section */}
+          <div style={{ marginBottom: '24px', pageBreakInside: 'avoid' }}>
+            <h3 style={{ fontSize: '1rem', fontWeight: 800, borderBottom: '1px solid #ef4444', paddingBottom: '4px', marginBottom: '10px', textTransform: 'uppercase', color: '#b91c1c' }}>
+              7. Investigative Leads Requiring Validation
+            </h3>
+            {unverifiedOsint.length > 0 ? (
+              <div style={{ border: '1px dashed #ef4444', borderRadius: '4px', padding: '12px', fontSize: '0.8rem', backgroundColor: '#fdf2f2' }}>
+                {unverifiedOsint.map(item => {
+                  const data = typeof item.result_data === 'string' ? JSON.parse(item.result_data) : item.result_data;
+                  return (
+                    <div key={item.id} style={{ marginBottom: '10px', borderBottom: '1px solid #fee2e2', paddingBottom: '6px' }}>
+                      <div>
+                        <strong>[{item.query_type}] Target:</strong> <code>{item.entity_value}</code> 
+                        <span style={{ marginLeft: '8px', fontSize: '0.65rem', padding: '1px 4px', border: '1px solid #ef4444', color: '#ef4444', borderRadius: '3px' }}>
+                          {data.verification_status || 'Unverified'} ({data.review_status || 'Pending Review'})
+                        </span>
+                      </div>
+                      <div style={{ marginTop: '2px', color: '#7f1d1d' }}>
+                        Indicator Lead: {data.lead?.description || 'Simulated OSINT records trace.'} (Confidence Index: {data.confidence_score}%)
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p style={{ fontSize: '0.85rem', color: '#64748b', fontStyle: 'italic' }}>No pending unverified leads registered.</p>
+            )}
+          </div>
 
           {/* Forensic chain of custody & Signatures */}
           <div style={{ borderTop: '2px solid #0f172a', paddingTop: '20px', marginTop: '40px', pageBreakInside: 'avoid' }}>

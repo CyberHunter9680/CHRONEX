@@ -26,8 +26,15 @@ export function isServerOnline() {
 // ─── Generic Fetch Wrapper ─────────────────────────────────────────
 async function apiFetch(endpoint, options = {}) {
   const url = `${BASE_URL}${endpoint}`;
+  const token = localStorage.getItem('chronex_token');
+  const headers = { 'Content-Type': 'application/json', ...options.headers };
+  
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
   const config = {
-    headers: { 'Content-Type': 'application/json', ...options.headers },
+    headers,
     ...options,
   };
   // Don't override Content-Type for FormData
@@ -44,6 +51,7 @@ async function apiFetch(endpoint, options = {}) {
     return { data: null, error: err.message };
   }
 }
+
 
 // ════════════════════════════════════════════════════════════════════
 //  CASES API
@@ -64,6 +72,15 @@ export const casesApi = {
   async getById(caseId) {
     return apiFetch(`/cases/${caseId}`);
   },
+
+  // PATCH /api/cases/:id/approve
+  async approve(caseId, action, remarks) {
+    return apiFetch(`/cases/${caseId}/approve`, {
+      method: 'PATCH',
+      body: JSON.stringify({ action, remarks }),
+    });
+  },
+
 
   // POST /api/cases
   async create(caseData) {
@@ -90,6 +107,26 @@ export const casesApi = {
   async getChainOfCustody(caseId) {
     return apiFetch(`/cases/${caseId}/chain-of-custody`);
   },
+
+  // GET /api/cases/:id/notes
+  async getNotes(caseId) {
+    return apiFetch(`/cases/${caseId}/notes`);
+  },
+
+  // POST /api/cases/:id/notes
+  async addNote(caseId, noteData) {
+    return apiFetch(`/cases/${caseId}/notes`, {
+      method: 'POST',
+      body: JSON.stringify(noteData),
+    });
+  },
+
+  // POST /api/cases/:id/ai-summary
+  async getAiSummary(caseId) {
+    return apiFetch(`/cases/${caseId}/ai-summary`, {
+      method: 'POST'
+    });
+  },
 };
 
 // ════════════════════════════════════════════════════════════════════
@@ -103,17 +140,23 @@ export const evidenceApi = {
     return apiFetch(`/evidence${query}`);
   },
 
-  // POST /api/evidence  (multipart form-data with file)
+  // POST /api/evidence/upload  (multipart form-data with file)
   async upload(caseId, file, meta = {}) {
     const formData = new FormData();
-    formData.append('file', file);
-    formData.append('case_id', caseId);
-    if (meta.uploaded_by) formData.append('uploaded_by', meta.uploaded_by);
-    if (meta.tags) formData.append('tags', JSON.stringify(meta.tags));
+    if (file) formData.append('file', file);
+    formData.append('caseId', caseId);
+    if (meta.fileType) formData.append('fileType', meta.fileType);
+    if (meta.customText) formData.append('customText', meta.customText);
 
-    return apiFetch('/evidence', {
+    const headers = {};
+    if (meta.uploadedBy) {
+      headers['X-Officer-Name'] = meta.uploadedBy;
+    }
+
+    return apiFetch('/evidence/upload', {
       method: 'POST',
       body: formData,
+      headers
     });
   },
 
@@ -122,9 +165,17 @@ export const evidenceApi = {
     return apiFetch(`/evidence/${evidenceId}`);
   },
 
-  // POST /api/evidence/:id/ocr
-  async runOcr(evidenceId) {
-    return apiFetch(`/evidence/${evidenceId}/ocr`, { method: 'POST' });
+  // PUT /api/evidence/:id/ocr
+  async updateOcr(evidenceId, ocrText, officerName) {
+    const headers = {};
+    if (officerName) {
+      headers['X-Officer-Name'] = officerName;
+    }
+    return apiFetch(`/evidence/${evidenceId}/ocr`, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify({ ocrText }),
+    });
   },
 
   // GET /api/evidence/:id/chain-of-custody
@@ -132,9 +183,12 @@ export const evidenceApi = {
     return apiFetch(`/evidence/${evidenceId}/chain-of-custody`);
   },
 
-  // GET /api/evidence/:id/verify
+  // POST /api/audit/verify-file
   async verifyIntegrity(evidenceId) {
-    return apiFetch(`/evidence/${evidenceId}/verify`);
+    return apiFetch('/audit/verify-file', {
+      method: 'POST',
+      body: JSON.stringify({ evidenceId })
+    });
   },
 };
 
@@ -284,3 +338,87 @@ export const auditApi = {
     });
   },
 };
+
+// ════════════════════════════════════════════════════════════════════
+//  IMPORTS API
+// ════════════════════════════════════════════════════════════════════
+
+export const importsApi = {
+  // POST /api/imports
+  async bulkImport(importData) {
+    return apiFetch('/imports', {
+      method: 'POST',
+      body: JSON.stringify(importData),
+    });
+  },
+
+  // GET /api/imports/historical
+  async getHistoricalCases() {
+    return apiFetch('/imports/historical');
+  },
+
+  // GET /api/imports/historical-entities
+  async getHistoricalEntities() {
+    return apiFetch('/imports/historical-entities');
+  },
+};
+
+// ════════════════════════════════════════════════════════════════════
+//  OSINT API
+// ════════════════════════════════════════════════════════════════════
+
+export const osintApi = {
+  // POST /api/osint/query
+  async queryEntity(queryData) {
+    return apiFetch('/osint/query', {
+      method: 'POST',
+      body: JSON.stringify(queryData),
+    });
+  },
+
+  // GET /api/osint/history
+  async getHistory() {
+    return apiFetch('/osint/history');
+  },
+
+  // PATCH /api/osint/results/:id/review
+  async updateReviewStatus(resultId, status) {
+    return apiFetch(`/osint/results/${resultId}/review`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    });
+  },
+};
+
+// ════════════════════════════════════════════════════════════════════
+//  AUTHENTICATION API
+// ════════════════════════════════════════════════════════════════════
+export const authApi = {
+  async login(identity, password) {
+    return apiFetch('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ identity, password }),
+    });
+  },
+  async verifyMfa(tempToken, otp) {
+    return apiFetch('/auth/verify-mfa', {
+      method: 'POST',
+      body: JSON.stringify({ temp_token: tempToken, otp }),
+    });
+  },
+  async register(userData) {
+    return apiFetch('/auth/register', {
+      method: 'POST',
+      body: JSON.stringify(userData),
+    });
+  },
+  async logout() {
+    return apiFetch('/auth/logout', {
+      method: 'POST',
+    });
+  },
+  async getSession() {
+    return apiFetch('/auth/session');
+  }
+};
+

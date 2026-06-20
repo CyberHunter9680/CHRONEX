@@ -1,16 +1,148 @@
-# React + Vite
+# CHRONEX: Cyber Evidence Timeline & Intelligence Platform
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+CHRONEX is a next-generation forensic dashboard and case management system designed for **Cyber Crime Police Units**. It enables investigators to ingest digital evidence (chats, statements, receipts), extract metadata, analyze threat patterns, and reconstruct case timelines automatically.
 
-Currently, two official plugins are available:
+---
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Key Features
 
-## React Compiler
+1. **Command Dashboard**
+   - Platform-wide telemetry showing active/closed cases, critical threats, and total financial loss.
+   - Aggregate charts detailing cases by classification and threat severity.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+2. **Case Dossier Workspace**
+   - Central registry for complaints, victims' profiles, FIR numbers, and investigator notes.
+   - Cryptographically secured with SHA-256 case files integrity signing.
 
-## Expanding the ESLint configuration
+3. **Evidence Ingestion Locker & OCR**
+   - Physical evidence file uploading supporting JPG, PNG, PDF, DOCX, TXT, and CSV.
+   - Non-blocking background OCR processing using Tesseract.js for Hindi and English transcriptions.
+   - Regex-based entity extractor pulling UPI IDs, phone numbers, bank accounts, emails, IP addresses, and transaction references.
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+4. **Threat Matrix & Correlation Engine**
+   - Automatically cross-correlates extracted identifiers against active cases.
+   - Upgraded to perform active-to-historical correlation scans matching active case suspects against legacy historical cases.
+   - Triggers warnings and alerts when matching fraud entities (mules, phone burners) appear across separate cases or legacy records.
+
+5. **Historical Case Importer**
+   - Support for bulk uploads of legacy dossiers in JSON or CSV format.
+   - Automated indexing of legacy cases and historical suspect indicators into the database for threat matrix scanning.
+
+6. **Lawful OSINT Workspace**
+   - Connectors for simulated WHOIS registry lookup, DNS intelligence traces, IP tower geo-reputation checking, and URL safety verification.
+   - Saves all trace requests and connector responses persistently in the database query log.
+
+7. **AI Case Summary Generator**
+   - Automated dossier compiler creating Executive Investigation Briefs, Key Findings, and Actionable Directives.
+   - Analyzes OCR indicators, timeline event milestones, and cross-case alert correlations.
+
+8. **Link Analysis Canvas**
+   - SVG-based interactive workspace visualization.
+   - Automatically clusters cases and entity nodes dynamically using a radial layout.
+   - Pinpoints coordination links bridging different fraud cases.
+   - Drag-and-drop node placement with persistent layout coordinates.
+
+9. **Security Audit & RBAC Simulator**
+   - Role-Based Access Control (RBAC) simulator supporting Admin, Investigator, and Analyst profiles.
+   - Automatic backend audit trail logging all state changes (case registrations, uploads, corrections) to the database.
+   - Server-side physical file SHA-256 signature verification matching file signatures to original ingestion signatures to detect file tampering.
+
+---
+
+## Core Architecture
+
+```
+               ┌────────────────────────┐
+               │    Vite / React UI     │
+               └───────────┬────────────┘
+                           │ HTTP REST
+                           ▼
+               ┌────────────────────────┐
+               │  Express REST API Server│
+               └───────────┬────────────┘
+                           │
+             ┌─────────────┴─────────────┐
+             ▼                           ▼
+   ┌───────────────────┐       ┌───────────────────┐
+   │ PostgreSQL DB     │       │ Local JSON Store  │
+   │ (Default Database)│       │ (Fallback Engine) │
+   └───────────────────┘       └───────────────────┘
+```
+
+The system is built on a hybrid database architecture:
+- **Default Database**: PostgreSQL database schema (`server/schema.sql`) utilizing custom indices on foreign keys and entity values.
+- **Graceful Fallback**: If a PostgreSQL connection is not established, the server automatically boots in **Offline Fallback Mode**, saving all tables and records to a persistent local JSON file-based database store inside the `server/db_store/` directory.
+
+---
+
+## Database Schema (PostgreSQL)
+
+- **`users`**: RBAC credentials (username, password hash, role, badge).
+- **`cases`**: Investigation files, victim metadata, and integrity hashes.
+- **`evidence`**: Uploaded evidence logs, file metadata, and OCR transcriptions.
+- **`entities`**: Extracted directory identifiers (UPI IDs, bank accounts, emails).
+- **`evidence_entities`**: N:M join table linking entities to cases and evidence.
+- **`timeline_events`**: Auto-reconstructed chronological logs of case milestones.
+- **`alerts`**: Threat alerts generated by duplicate active/historical entity matches.
+- **`audit_logs`**: System event logs tracking officer interactions.
+- **`chain_of_custody`**: Digital custody tracking for evidence files.
+- **`victims`**: Separate victim registry linked to cases.
+- **`historical_cases`**: Legacy cases repository for historical bulk uploads.
+- **`historical_entities`**: Legacy suspect indicators extracted from historical cases.
+- **`investigation_notes`**: Persistent daily diary notes logged by officers per case.
+- **`osint_queries`**: Historical registry of executed OSINT queries.
+- **`osint_results`**: Persisted response data returned from OSINT intelligence connectors.
+
+---
+
+## Performance Optimizations
+
+1. **Non-Blocking Background OCR Workers**
+   - High-CPU operations (Tesseract OCR and Regex parsing) are executed in background worker scopes.
+   - The upload API returns a `201 Created` code in **50ms** with a `[Processing OCR...]` status, preventing the Node.js single-threaded event loop from freezing.
+
+2. **$O(N) \to O(1)$ N+1 Query Elimination**
+   - The cross-case correlation scanner and the global intelligence directory queries are refactored from looping sequential lookups ($O(N)$) into single-query database aggregations using `LEFT JOIN`, `GROUP BY`, and `array_agg` functions.
+
+3. **Server-Side SQL Telemetry Aggregations**
+   - Dashboard stats calculations are computed directly on the database engine using SQL aggregates (`COUNT`, `SUM`, `CASE WHEN`) rather than transferring complete tables to Node.js memory.
+
+---
+
+## Installation & Setup
+
+### Prerequisites
+- Node.js (v18+)
+- PostgreSQL (Optional, fallback JSON database is automatically used if PostgreSQL is not running)
+
+### Server Setup
+1. Open a terminal in the `server` directory.
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+3. Set environment variables in a `.env` file (or let defaults apply):
+   ```env
+   PORT=3001
+   PGHOST=localhost
+   PGPORT=5432
+   PGUSER=postgres
+   PGPASSWORD=your_password
+   PGDATABASE=chronex
+   ```
+4. Start the backend:
+   ```bash
+   npm start
+   ```
+
+### Frontend Setup
+1. Open a terminal in the project root directory.
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+3. Start the Vite React development server:
+   ```bash
+   npm run dev
+   ```
+4. Open the browser at `http://localhost:5173`.

@@ -1,0 +1,18 @@
+[
+  {
+    "id": "CX-2025-OLD001",
+    "title": "Legacy Stock Trading Syndicate",
+    "description": "Large-scale WhatsApp investment scam targetting retired personnel.",
+    "category": "Investment Scam",
+    "loss_amount": 550000,
+    "status": "Closed"
+  },
+  {
+    "id": "CX-2025-OLD002",
+    "title": "Quick Loan Phishing Hub",
+    "description": "Malicious APK loan blackmailing Ring operated from Jamtara.",
+    "category": "Loan App Fraud",
+    "loss_amount": 180000,
+    "status": "Closed"
+  }
+]

@@ -1,0 +1,9 @@
+[
+  {
+    "id": 1,
+    "entity_type": "IP Address",
+    "entity_value": "192.168.1.100",
+    "query_type": "IP Lookup",
+    "officer": "Inspector S. Sharma"
+  }
+]

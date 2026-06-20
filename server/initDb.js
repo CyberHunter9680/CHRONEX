@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
+import bcrypt from 'bcryptjs';
 
 dotenv.config();
 
@@ -170,11 +171,27 @@ Remarks: Loan closure fees`,
 ];
 
 const seedUsers = [
-  { username: 'admin', password_hash: 'admin123', role: 'Administrator', name: 'Superintendent K. Raghavan', badge: 'IPS-00109', district: 'State Cyber Cell' },
-  { username: 'inspector', password_hash: 'inspector123', role: 'Inspector', name: 'Inspector S. Sharma', badge: 'IPS-89240', district: 'Noida Cyber Cell' },
-  { username: 'analyst', password_hash: 'analyst123', role: 'Analyst', name: 'Dr. Neha Verma (Forensics)', badge: 'EXP-42890', district: 'District Forensic Lab' },
-  { username: 'viewer', password_hash: 'viewer123', role: 'Read Only Viewer', name: 'Sub-Inspector A. Kumar', badge: 'SI-77301', district: 'Noida Sector-62 PS' }
+  { username: 'admin', email: 'admin@chronex.gov.in', password_plain: 'SuperAdmin123!', role: 'SUPER ADMIN', name: 'Superintendent K. Raghavan', badge: 'IPS-00109', district: 'State Cyber Cell' },
+  { username: 'sp', email: 'sp.noida@chronex.gov.in', password_plain: 'Superintendent123!', role: 'SP', name: 'SP Superintendent K. Raghavan', badge: 'IPS-00201', district: 'Noida Cyber Cell' },
+  { username: 'incharge', email: 'incharge.noida@chronex.gov.in', password_plain: 'Incharge123!', role: 'CYBER CELL INCHARGE', name: 'Incharge S. Sharma', badge: 'IPS-00305', district: 'Noida Cyber Cell' },
+  { username: 'inspector', email: 'officer.sharma@chronex.gov.in', password_plain: 'Inspector123!', role: 'INVESTIGATION OFFICER', name: 'Inspector S. Sharma', badge: 'IPS-89240', district: 'Noida Cyber Cell' },
+  { username: 'analyst', email: 'analyst.verma@chronex.gov.in', password_plain: 'Analyst123!', role: 'ANALYST', name: 'Dr. Neha Verma (Forensics)', badge: 'EXP-42890', district: 'District Forensic Lab' },
+  { username: 'viewer', email: 'viewer.kumar@chronex.gov.in', password_plain: 'Viewer123!', role: 'READ ONLY VIEWER', name: 'Sub-Inspector A. Kumar', badge: 'SI-77301', district: 'Noida Sector-62 PS' }
 ];
+
+const hashedSeedUsers = seedUsers.map((user, index) => {
+  const { password_plain, ...rest } = user;
+  return {
+    id: index + 1,
+    ...rest,
+    password_hash: bcrypt.hashSync(password_plain, 10),
+    failed_logins: 0,
+    locked_until: null,
+    mfa_secret: 'CHRONEX_MFA_SECRET_' + user.username.toUpperCase(),
+    password_changed_at: new Date().toISOString()
+  };
+});
+
 
 const seedTimelineEvents = [
   { case_id: 'CX-2026-0401', timestamp: '2026-06-12T10:15:00Z', title: 'Scam Inception', description: 'Suspect group contact via WhatsApp offering fake crypto signals.', created_by: 'Inspector S. Sharma' },
@@ -225,6 +242,36 @@ const seedChainOfCustody = [
   { evidence_id: 'E-40301', action: 'Uploaded', handled_by: 'Inspector S. Sharma', description: 'Ingested file loan_app_receipt.png. Generated SHA-256 fingerprint: efcde04847e0984d...' }
 ];
 
+const seedVictims = [
+  { case_id: 'CX-2026-0401', name: 'Abhishek Vyas', mobile: '+91 91234 56789', email: 'abhishek.v@gmail.com', address: 'Noida Sector 62' },
+  { case_id: 'CX-2026-0402', name: 'Rohan Mehta', mobile: '+91 98989 89898', email: 'rohan.mehta@yahoo.com', address: 'Greater Noida' },
+  { case_id: 'CX-2026-0403', name: 'Priya Sharma', mobile: '+91 88888 77777', email: 'priya22@gmail.com', address: 'Noida Sector 15' }
+];
+
+const seedHistoricalCases = [
+  { id: 'CX-2025-OLD001', title: 'Legacy Stock Trading Syndicate', description: 'Large-scale WhatsApp investment scam targetting retired personnel.', category: 'Investment Scam', loss_amount: 550000.00, status: 'Closed' },
+  { id: 'CX-2025-OLD002', title: 'Quick Loan Phishing Hub', description: 'Malicious APK loan blackmailing Ring operated from Jamtara.', category: 'Loan App Fraud', loss_amount: 180000.00, status: 'Closed' }
+];
+
+const seedHistoricalEntities = [
+  { case_id: 'CX-2025-OLD001', entity_type: 'UPI ID', entity_value: 'securepay.mule@okaxis', risk_score: 'Critical', details: 'Core collection address for trading scam.' },
+  { case_id: 'CX-2025-OLD001', entity_type: 'Mobile Number', entity_value: '+91 91234 56789', risk_score: 'High', details: 'Legacy recruiter phone.' },
+  { case_id: 'CX-2025-OLD002', entity_type: 'UPI ID', entity_value: 'quickloan.pay@paytm', risk_score: 'High', details: 'Loan recovery account.' }
+];
+
+const seedInvestigationNotes = [
+  { case_id: 'CX-2026-0401', officer: 'Inspector S. Sharma', note_text: 'Obtained official bank KYC statement for securepay.mule@okaxis. Registered to a shell trading company.' },
+  { case_id: 'CX-2026-0401', officer: 'Inspector S. Sharma', note_text: 'Coordinating with cyber cell Noida for physical raid locations.' }
+];
+
+const seedOsintQueries = [
+  { id: 1, entity_type: 'IP Address', entity_value: '192.168.1.100', query_type: 'IP Lookup', officer: 'Inspector S. Sharma' }
+];
+
+const seedOsintResults = [
+  { query_id: 1, source: 'IP Reputation service', result_data: { ip: '192.168.1.100', country: 'India', isp: 'Reliance Jio', risk_score: 15, is_vpn: false } }
+];
+
 function seedLocalStore() {
   console.log('⚠️  [CHRONEX DB INIT] PostgreSQL connection failed. Starting persistent JSON file seeding...');
   
@@ -240,12 +287,27 @@ function seedLocalStore() {
 
   writeTable('cases', seedCases);
   writeTable('evidence', seedEvidence);
-  writeTable('users', seedUsers);
-  writeTable('timeline_events', seedTimelineEvents);
-  writeTable('entities', seedEntities);
+  writeTable('users', hashedSeedUsers);
+  const timelineWithIds = seedTimelineEvents.map((t, idx) => ({
+    id: idx + 1,
+    ...t
+  }));
+  writeTable('timeline_events', timelineWithIds);
+
+  const entitiesWithIds = seedEntities.map((ent, idx) => ({
+    id: idx + 1,
+    ...ent
+  }));
+  writeTable('entities', entitiesWithIds);
   writeTable('evidence_entities', seedEvidenceEntities);
   writeTable('alerts', seedAlerts);
   writeTable('chain_of_custody', seedChainOfCustody);
+  writeTable('victims', seedVictims);
+  writeTable('historical_cases', seedHistoricalCases);
+  writeTable('historical_entities', seedHistoricalEntities);
+  writeTable('investigation_notes', seedInvestigationNotes);
+  writeTable('osint_queries', seedOsintQueries);
+  writeTable('osint_results', seedOsintResults);
   writeTable('audit_logs', []);
   writeTable('reports', []);
   
@@ -305,12 +367,12 @@ async function init() {
     await dbClient.query(schemaSql);
 
     console.log('[CHRONEX DB INIT] Registering default law-enforcement users...');
-    for (const user of seedUsers) {
+    for (const user of hashedSeedUsers) {
       await dbClient.query(`
-        INSERT INTO users (username, password_hash, role, name, badge, district)
-        VALUES ($1, $2, $3, $4, $5, $6)
+        INSERT INTO users (username, email, password_hash, role, name, badge, district, mfa_secret)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
         ON CONFLICT (username) DO NOTHING
-      `, [user.username, user.password_hash, user.role, user.name, user.badge, user.district]);
+      `, [user.username, user.email, user.password_hash, user.role, user.name, user.badge, user.district, user.mfa_secret]);
     }
 
     const caseCheck = await dbClient.query('SELECT COUNT(*) FROM cases');
@@ -379,6 +441,60 @@ async function init() {
           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
           ON CONFLICT (id) DO NOTHING
         `, [a.id, a.type, a.severity, a.title, a.description, a.entity_type, a.entity_value, a.cases]);
+      }
+
+      // Seed victims
+      for (const v of seedVictims) {
+        await dbClient.query(`
+          INSERT INTO victims (case_id, name, mobile, email, address)
+          VALUES ($1, $2, $3, $4, $5)
+        `, [v.case_id, v.name, v.mobile, v.email, v.address]);
+      }
+
+      // Seed historical cases
+      for (const hc of seedHistoricalCases) {
+        await dbClient.query(`
+          INSERT INTO historical_cases (id, title, description, category, loss_amount, status)
+          VALUES ($1, $2, $3, $4, $5, $6)
+        `, [hc.id, hc.title, hc.description, hc.category, hc.loss_amount, hc.status]);
+      }
+
+      // Seed historical entities
+      for (const he of seedHistoricalEntities) {
+        await dbClient.query(`
+          INSERT INTO historical_entities (case_id, entity_type, entity_value, risk_score, details)
+          VALUES ($1, $2, $3, $4, $5)
+          ON CONFLICT (case_id, entity_type, entity_value) DO NOTHING
+        `, [he.case_id, he.entity_type, he.entity_value, he.risk_score, he.details]);
+      }
+
+      // Seed investigation notes
+      for (const note of seedInvestigationNotes) {
+        await dbClient.query(`
+          INSERT INTO investigation_notes (case_id, officer, note_text)
+          VALUES ($1, $2, $3)
+        `, [note.case_id, note.officer, note.note_text]);
+      }
+
+      // Seed osint queries and results
+      for (const q of seedOsintQueries) {
+        const queryRes = await dbClient.query(`
+          INSERT INTO osint_queries (id, entity_type, entity_value, query_type, officer)
+          VALUES ($1, $2, $3, $4, $5)
+          ON CONFLICT DO NOTHING
+          RETURNING id
+        `, [q.id, q.entity_type, q.entity_value, q.query_type, q.officer]);
+        
+        if (queryRes.rows.length > 0) {
+          const qId = queryRes.rows[0].id;
+          const resData = seedOsintResults.find(r => r.query_id === q.id);
+          if (resData) {
+            await dbClient.query(`
+              INSERT INTO osint_results (query_id, source, result_data)
+              VALUES ($1, $2, $3)
+            `, [qId, resData.source, JSON.stringify(resData.result_data)]);
+          }
+        }
       }
 
       console.log('[CHRONEX DB INIT] Seeding completed.');

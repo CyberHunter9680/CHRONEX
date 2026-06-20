@@ -9,18 +9,56 @@ import {
   AlertTriangle,
   Clock
 } from 'lucide-react';
+import { casesApi } from '../services/api';
 
-export default function Dashboard({ cases, evidence, entities, alerts, onNavigate }) {
+export default function Dashboard({ cases, evidence, entities, alerts, onNavigate, currentUser, onRefresh }) {
+
+  const [submittingId, setSubmittingId] = useState(null);
+  const [remarksText, setRemarksText] = useState({});
+
+  const handleApproveAction = async (caseId, action) => {
+    setSubmittingId(caseId);
+    const comment = remarksText[caseId] || '';
+    
+    try {
+      const response = await casesApi.approve(caseId, action, comment);
+      if (response.error) {
+        alert(`Failed to execute approval action: ${response.error}`);
+      } else {
+        alert(`Case ${caseId} has been successfully ${action === 'approve' ? 'approved' : action === 'reject' ? 'rejected' : 'sent for clarification'}.`);
+        if (onRefresh) onRefresh();
+      }
+    } catch (err) {
+      alert(`Network error executing approval: ${err.message}`);
+    } finally {
+      setSubmittingId(null);
+    }
+  };
+
+  // Client-side Zero-Trust filtration fallback
+  const isSPOrAdmin = ['SP', 'SUPER ADMIN', 'CYBER CELL INCHARGE'].includes(currentUser?.role);
+  const filteredCases = isSPOrAdmin 
+    ? cases 
+    : cases.filter(c => c.assignedOfficer === currentUser?.name || c.assignedOfficer === currentUser?.username || c.assigned_officer === currentUser?.name || c.assigned_officer === currentUser?.username);
+
   // Statistics computations
-  const totalCases = cases.length;
-  const totalEvidence = evidence.length;
-  const totalEntities = entities.length;
-  const activeAlerts = alerts.filter(a => a.severity === 'Critical' || a.severity === 'High').length;
+  const totalCases = filteredCases.length;
+  const totalEvidence = isSPOrAdmin 
+    ? evidence.length 
+    : evidence.filter(e => filteredCases.some(c => c.id === e.caseId || c.id === e.case_id)).length;
+
+  const totalEntities = isSPOrAdmin
+    ? entities.length
+    : entities.filter(ent => (ent.casesLinked || []).some(cid => filteredCases.some(c => c.id === cid))).length;
+
+  const activeAlerts = isSPOrAdmin
+    ? alerts.filter(a => a.severity === 'Critical' || a.severity === 'High').length
+    : alerts.filter(a => (a.severity === 'Critical' || a.severity === 'High') && (a.cases || []).some(cid => filteredCases.some(c => c.id === cid))).length;
   
   // Calculate total fraud amount
-  const totalFraud = cases.reduce((acc, curr) => {
+  const totalFraud = filteredCases.reduce((acc, curr) => {
     // Basic regex extract amount from case description or notes
-    const match = curr.description.match(/(?:Rs|INR|₹)\s*(\d+(?:,\d+)*)/i);
+    const match = curr.description?.match(/(?:Rs|INR|₹)\s*(\d+(?:,\d+)*)/i);
     if (match) {
       const num = parseInt(match[1].replace(/,/g, ''), 10);
       return acc + (isNaN(num) ? 0 : num);
@@ -35,9 +73,10 @@ export default function Dashboard({ cases, evidence, entities, alerts, onNavigat
 
   // Group by category for donut chart
   const categories = {};
-  cases.forEach(c => {
+  filteredCases.forEach(c => {
     categories[c.classification] = (categories[c.classification] || 0) + 1;
   });
+
 
   const catKeys = Object.keys(categories);
   const catValues = Object.values(categories);
@@ -128,8 +167,128 @@ export default function Dashboard({ cases, evidence, entities, alerts, onNavigat
         </div>
       </div>
 
+      {/* SP Case Approval Widget */}
+      {currentUser?.role === 'SP' && (
+        <div className="glow-card" style={{ display: 'flex', flexDirection: 'column', gap: '16px', border: '1px solid rgba(0, 240, 255, 0.2)' }}>
+          <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--text-primary)', borderBottom: '1px solid var(--border-primary)', paddingBottom: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Shield style={{ color: 'var(--primary)' }} /> PENDING CASE DOSSIER APPROVALS
+          </h3>
+          {cases.filter(c => c.status === 'Pending Approval' || c.status === 'Pending Clarification').length === 0 ? (
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>No pending case approval dossiers submitted in cell.</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {cases.filter(c => c.status === 'Pending Approval' || c.status === 'Pending Clarification').map(c => {
+                const caseId = c.id;
+                const remarks = remarksText[caseId] || '';
+                return (
+                  <div 
+                    key={caseId} 
+                    style={{ 
+                      background: 'var(--bg-tertiary)', 
+                      border: '1px solid var(--border-primary)',
+                      padding: '16px',
+                      borderRadius: '8px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '12px'
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--primary)', fontWeight: 700, fontSize: '0.95rem' }}>{caseId}</span>
+                          <span className={`badge ${c.status === 'Pending Approval' ? 'badge-medium' : 'badge-low'}`}>{c.status}</span>
+                        </div>
+                        <h4 style={{ fontWeight: 700, color: 'var(--text-primary)', marginTop: '4px', fontSize: '0.9rem' }}>{c.title}</h4>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '2px', display: 'flex', gap: '16px' }}>
+                          <span>Victim: <strong style={{ color: 'var(--text-primary)' }}>{c.victimName || c.victim_name}</strong></span>
+                          <span>Classification: <strong style={{ color: 'var(--text-primary)' }}>{c.classification}</strong></span>
+                          <span>Assigned Officer: <strong style={{ color: 'var(--text-primary)' }}>{c.assignedOfficer || c.assigned_officer}</strong></span>
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <button
+                          disabled={submittingId === caseId}
+                          onClick={() => handleApproveAction(caseId, 'approve')}
+                          style={{
+                            background: '#10b981',
+                            color: '#fff',
+                            border: 'none',
+                            padding: '6px 12px',
+                            borderRadius: '4px',
+                            fontSize: '0.75rem',
+                            fontWeight: 700,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          APPROVE
+                        </button>
+                        <button
+                          disabled={submittingId === caseId}
+                          onClick={() => handleApproveAction(caseId, 'clarify')}
+                          style={{
+                            background: '#f59e0b',
+                            color: '#fff',
+                            border: 'none',
+                            padding: '6px 12px',
+                            borderRadius: '4px',
+                            fontSize: '0.75rem',
+                            fontWeight: 700,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          NEED CLARIFICATION
+                        </button>
+                        <button
+                          disabled={submittingId === caseId}
+                          onClick={() => handleApproveAction(caseId, 'reject')}
+                          style={{
+                            background: '#ef4444',
+                            color: '#fff',
+                            border: 'none',
+                            padding: '6px 12px',
+                            borderRadius: '4px',
+                            fontSize: '0.75rem',
+                            fontWeight: 700,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          REJECT
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Remarks Input */}
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                      <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600, flexShrink: 0 }}>Remarks/Feedback:</label>
+                      <input
+                        type="text"
+                        placeholder="Add review comment or clarification instructions..."
+                        value={remarks}
+                        onChange={(e) => setRemarksText(prev => ({ ...prev, [caseId]: e.target.value }))}
+                        style={{
+                          flexGrow: 1,
+                          background: 'var(--bg-secondary)',
+                          border: '1px solid var(--border-primary)',
+                          borderRadius: '4px',
+                          padding: '6px 10px',
+                          color: 'var(--text-primary)',
+                          fontSize: '0.75rem',
+                          outline: 'none'
+                        }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Main Charts & Visualizations Grid */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '24px' }}>
+
         
         {/* Trend Area Chart SVG */}
         <div className="glow-card" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>

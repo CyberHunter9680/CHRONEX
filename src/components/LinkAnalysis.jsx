@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   Share2, 
   RefreshCw, 
@@ -42,12 +42,109 @@ const initialLinks = [
   { source: "case:CX-2026-0403", target: "account:918273645029" }
 ];
 
-export default function LinkAnalysis() {
-  const [nodes, setNodes] = useState(initialNodes);
-  const [links, setLinks] = useState(initialLinks);
+export default function LinkAnalysis({ cases = [], entities = [], evidence = [], alerts = [] }) {
+  const [nodes, setNodes] = useState([]);
+  const [links, setLinks] = useState([]);
   const [draggedNodeId, setDraggedNodeId] = useState(null);
   const [selectedNodeId, setSelectedNodeId] = useState(null);
   const [hoveredNodeId, setHoveredNodeId] = useState(null);
+
+  useEffect(() => {
+    // 1. Build all case nodes
+    const caseNodes = cases.map(c => ({
+      id: `case:${c.id}`,
+      label: `${c.id}: ${c.title || 'Untitled Case'}`,
+      type: 'Case',
+      risk: c.priority || 'Medium',
+      casesLinked: [c.id]
+    }));
+
+    // 2. Build all entity nodes
+    const entityNodes = entities.map(ent => ({
+      id: `entity:${ent.value}`,
+      label: ent.value,
+      type: ent.type,
+      risk: ent.riskScore || 'Medium',
+      casesLinked: ent.casesLinked || []
+    }));
+
+    // Combine all nodes
+    const allNewNodes = [...caseNodes, ...entityNodes];
+
+    // 3. Build links between cases and entities
+    const allNewLinks = [];
+    entities.forEach(ent => {
+      const linkedCases = ent.casesLinked || [];
+      linkedCases.forEach(caseId => {
+        const caseExists = cases.some(c => c.id === caseId);
+        if (caseExists) {
+          allNewLinks.push({
+            source: `case:${caseId}`,
+            target: `entity:${ent.value}`
+          });
+        }
+      });
+    });
+
+    // 4. Position the nodes dynamically using a radial layout
+    setNodes(prevNodes => {
+      const posMap = new Map(prevNodes.map(n => [n.id, { x: n.x, y: n.y }]));
+      
+      const width = 800;
+      const height = 500;
+      
+      const casesList = allNewNodes.filter(n => n.type === 'Case');
+      casesList.forEach((c, idx) => {
+        if (posMap.has(c.id)) {
+          c.x = posMap.get(c.id).x;
+          c.y = posMap.get(c.id).y;
+        } else {
+          const angle = (idx / Math.max(1, casesList.length)) * 2 * Math.PI;
+          c.x = width / 2 + Math.cos(angle) * 220;
+          c.y = height / 2 + Math.sin(angle) * 140;
+        }
+      });
+
+      const entitiesList = allNewNodes.filter(n => n.type !== 'Case');
+      entitiesList.forEach((ent, idx) => {
+        if (posMap.has(ent.id)) {
+          ent.x = posMap.get(ent.id).x;
+          ent.y = posMap.get(ent.id).y;
+        } else {
+          const linkedCaseIds = ent.casesLinked || [];
+          if (linkedCaseIds.length > 0) {
+            let sumX = 0, sumY = 0, count = 0;
+            linkedCaseIds.forEach(cid => {
+              const caseNode = casesList.find(c => c.id === `case:${cid}`);
+              if (caseNode) {
+                sumX += caseNode.x;
+                sumY += caseNode.y;
+                count++;
+              }
+            });
+            if (count > 0) {
+              const avgX = sumX / count;
+              const avgY = sumY / count;
+              const angle = (idx * 1.35) % (2 * Math.PI);
+              const dist = 70 + (idx % 4) * 20 + (linkedCaseIds.length > 1 ? 0 : 30);
+              ent.x = avgX + Math.cos(angle) * dist;
+              ent.y = avgY + Math.sin(angle) * dist;
+            } else {
+              ent.x = width / 2 + Math.cos(idx) * 280;
+              ent.y = height / 2 + Math.sin(idx) * 190;
+            }
+          } else {
+            ent.x = width / 2 + Math.cos(idx) * 280;
+            ent.y = height / 2 + Math.sin(idx) * 190;
+          }
+        }
+      });
+
+      return allNewNodes;
+    });
+
+    setLinks(allNewLinks);
+  }, [cases, entities, evidence]);
   
   // Filters
   const [showCases, setShowCases] = useState(true);
@@ -90,7 +187,7 @@ export default function LinkAnalysis() {
   };
 
   const handleResetLayout = () => {
-    setNodes(initialNodes);
+    setNodes([]);
     setSelectedNodeId(null);
     setHoveredNodeId(null);
   };
@@ -155,6 +252,25 @@ export default function LinkAnalysis() {
     if (risk === 'Critical') return 'var(--critical)';
     if (risk === 'High') return 'var(--warning)';
     return 'var(--success)';
+  };
+
+  const getNodeIconColor = (type) => {
+    if (type === 'Case') return '#ffffff';
+    if (type === 'Mobile Number') return '#0369a1';
+    if (type === 'UPI ID') return '#0f172a';
+    return '#ffffff';
+  };
+
+  const getNodeIcon = (type) => {
+    const size = type === 'Case' ? 14 : 11;
+    if (type === 'Case') return <ShieldAlert size={size} style={{ color: getNodeIconColor(type) }} />;
+    if (type === 'Mobile Number') return <Phone size={size} style={{ color: getNodeIconColor(type) }} />;
+    if (type === 'UPI ID') return <Hash size={size} style={{ color: getNodeIconColor(type) }} />;
+    if (type === 'Email Address') return <Mail size={size} style={{ color: getNodeIconColor(type) }} />;
+    if (type === 'Bank Account') return <CreditCard size={size} style={{ color: getNodeIconColor(type) }} />;
+    if (type === 'IP Address') return <Globe size={size} style={{ color: getNodeIconColor(type) }} />;
+    if (type === 'Username') return <User size={size} style={{ color: getNodeIconColor(type) }} />;
+    return <Database size={size} style={{ color: getNodeIconColor(type) }} />;
   };
 
   return (
@@ -325,6 +441,25 @@ export default function LinkAnalysis() {
                     strokeWidth={isSelected ? 3 : 1.5}
                     className="node-circle"
                   />
+
+                  {/* Icon Overlay */}
+                  <foreignObject
+                    width={radius * 1.4}
+                    height={radius * 1.4}
+                    x={-radius * 0.7}
+                    y={-radius * 0.7}
+                    style={{ pointerEvents: 'none' }}
+                  >
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      width: '100%',
+                      height: '100%'
+                    }}>
+                      {getNodeIcon(node.type)}
+                    </div>
+                  </foreignObject>
 
                   {/* Text label */}
                   <text

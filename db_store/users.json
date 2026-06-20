@@ -1,34 +1,86 @@
 [
   {
+    "id": 1,
     "username": "admin",
-    "password_hash": "admin123",
-    "role": "Administrator",
+    "email": "admin@chronex.gov.in",
+    "role": "SUPER ADMIN",
     "name": "Superintendent K. Raghavan",
     "badge": "IPS-00109",
-    "district": "State Cyber Cell"
+    "district": "State Cyber Cell",
+    "password_hash": "$2b$10$i.pFy/B5aCTQXqxEZjdffemOFET9PrFZFuFi/DYt75JPo82vzJGbe",
+    "failed_logins": 0,
+    "locked_until": null,
+    "mfa_secret": "CHRONEX_MFA_SECRET_ADMIN",
+    "password_changed_at": "2026-06-20T10:59:51.934Z"
   },
   {
+    "id": 2,
+    "username": "sp",
+    "email": "sp.noida@chronex.gov.in",
+    "role": "SP",
+    "name": "SP Superintendent K. Raghavan",
+    "badge": "IPS-00201",
+    "district": "Noida Cyber Cell",
+    "password_hash": "$2b$10$2ogclzgEIk6DE5xHCpHhtOEKpcRWdjFNiKUHOqvtBpvsRpSwsF37O",
+    "failed_logins": 0,
+    "locked_until": null,
+    "mfa_secret": "CHRONEX_MFA_SECRET_SP",
+    "password_changed_at": "2026-06-20T10:59:52.014Z"
+  },
+  {
+    "id": 3,
+    "username": "incharge",
+    "email": "incharge.noida@chronex.gov.in",
+    "role": "CYBER CELL INCHARGE",
+    "name": "Incharge S. Sharma",
+    "badge": "IPS-00305",
+    "district": "Noida Cyber Cell",
+    "password_hash": "$2b$10$qHqQJqd1jDM8vzvQE3vbwOmKAUtUdHN66R4ZDjYDcm995Gxed9zsq",
+    "failed_logins": 0,
+    "locked_until": null,
+    "mfa_secret": "CHRONEX_MFA_SECRET_INCHARGE",
+    "password_changed_at": "2026-06-20T10:59:52.095Z"
+  },
+  {
+    "id": 4,
     "username": "inspector",
-    "password_hash": "inspector123",
-    "role": "Inspector",
+    "email": "officer.sharma@chronex.gov.in",
+    "role": "INVESTIGATION OFFICER",
     "name": "Inspector S. Sharma",
     "badge": "IPS-89240",
-    "district": "Noida Cyber Cell"
+    "district": "Noida Cyber Cell",
+    "password_hash": "$2b$10$9s2cVkdyL7wt9q/dC/NosORii5WYb8PZqyCKY558t8FqQ95ZfRcS2",
+    "failed_logins": 0,
+    "locked_until": null,
+    "mfa_secret": "CHRONEX_MFA_SECRET_INSPECTOR",
+    "password_changed_at": "2026-06-20T10:59:52.178Z"
   },
   {
+    "id": 5,
     "username": "analyst",
-    "password_hash": "analyst123",
-    "role": "Analyst",
+    "email": "analyst.verma@chronex.gov.in",
+    "role": "ANALYST",
     "name": "Dr. Neha Verma (Forensics)",
     "badge": "EXP-42890",
-    "district": "District Forensic Lab"
+    "district": "District Forensic Lab",
+    "password_hash": "$2b$10$/denuuZSi1D4QxdGsfySUufNdVU1bLwwxehr5ojPuonlhseEW2lYG",
+    "failed_logins": 0,
+    "locked_until": null,
+    "mfa_secret": "CHRONEX_MFA_SECRET_ANALYST",
+    "password_changed_at": "2026-06-20T10:59:52.262Z"
   },
   {
+    "id": 6,
     "username": "viewer",
-    "password_hash": "viewer123",
-    "role": "Read Only Viewer",
+    "email": "viewer.kumar@chronex.gov.in",
+    "role": "READ ONLY VIEWER",
     "name": "Sub-Inspector A. Kumar",
     "badge": "SI-77301",
-    "district": "Noida Sector-62 PS"
+    "district": "Noida Sector-62 PS",
+    "password_hash": "$2b$10$1MNIPrPiJQdG1eKcx4J8PuWJqdt6syRmDY7vIhNdvYjyLg./9RuIq",
+    "failed_logins": 0,
+    "locked_until": null,
+    "mfa_secret": "CHRONEX_MFA_SECRET_VIEWER",
+    "password_changed_at": "2026-06-20T10:59:52.350Z"
   }
 ]

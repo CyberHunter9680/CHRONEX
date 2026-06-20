@@ -43,6 +43,7 @@ export default function EvidenceVault({
   evidence, 
   cases, 
   onAddEvidence, 
+  onUploadEvidence,
   onUpdateEvidence, 
   onAddAuditLog,
   preselectedCaseId
@@ -127,20 +128,22 @@ export default function EvidenceVault({
   };
 
   // ── Evidence upload ─────────────────────────────────
-  const handleUploadEvidence = (e) => {
+  const handleUploadEvidence = async (e) => {
     e.preventDefault();
     if (!fileName && !selectedFile) {
       setFileError('Please select a file from your system or enter a file name.');
       return;
     }
     
+    const finalFileName = selectedFile ? selectedFile.name : fileName;
+    
     // Check if evidence name already exists (Duplicate Evidence Shield)
-    const duplicateFile = evidence.find(item => item.fileName.toLowerCase() === fileName.toLowerCase());
+    const duplicateFile = evidence.find(item => item.fileName.toLowerCase() === finalFileName.toLowerCase());
     if (duplicateFile) {
       const proceed = window.confirm(
         `⚠️ DETECTED DUPLICATE EVIDENCE FILE!\n\n` +
-        `File: "${fileName}" has already been secured under Case ${duplicateFile.caseId}.\n` +
-        `Forensic Hash: ${duplicateFile.hash.substring(0, 16)}...\n\n` +
+        `File: "${finalFileName}" has already been secured under Case ${duplicateFile.caseId}.\n` +
+        `Forensic Hash: ${(duplicateFile.sha256Hash || duplicateFile.hash || '').substring(0, 16)}...\n\n` +
         `Do you want to proceed with duplicate ingestion? (This will be logged in security audit)`
       );
       if (!proceed) {
@@ -149,68 +152,17 @@ export default function EvidenceVault({
     }
 
     setIsProcessing(true);
+    setFileError('');
 
-    setTimeout(() => {
-      const randomId = `E-${Math.floor(200 + Math.random() * 800)}`;
-      const randomHash = Array.from({length: 64}, () => Math.floor(Math.random()*16).toString(16)).join('');
-      
-      const defaultTexts = {
-        'WhatsApp Chat': `[10:15 AM] +91 99887 76655: Please join target channel.
-[10:16 AM] Target VIP Support: Transfer ₹25,000 immediately to secure your returns.
-[10:20 AM] Victim: Paid. Txn ref: UPI982374829384. Merchant UPI: fastpay@paytm.`,
-        'Telegram Chat': `[18:30] @taskmaster_vip: We will release APK file now. Download it.
-[18:32] @taskmaster_vip: Install 'QuickCash.apk' from server 8.8.8.8.
-[18:35] Victim: APK downloaded and permissions approved. App says pending.`,
-        'UPI Receipt': `Google Pay Receipt
-Date: 12 June 2026
-Transaction ID: UPI827364829103
-Paid to: MULE ACCOUNT ASSOCIATES
-UPI ID: paymule@okicici
-IFSC: ICIC0000888
-Amount: ₹45,000`,
-        'Bank Statement': `HDFC Bank Statement
-Account: 50100234950293
-IFSC: HDFC0000104
-Date: 14 June 2026
-IMPS Transfer to: securepay.mule@okaxis
-Amount: 1,50,000 INR`,
-        'SMS': `ALERT: Morph video generated. Send 20,000 Rs to UPI: securepay.mule@okaxis.
-Else video will be sent to relative contacts. Call +91 91234 56789.`,
-        'Email': `From: support@amazon-scam-alert.com
-To: abhishek.v@gmail.com
-Urgent: Phishing notification. Click link http://amazon-verification.icu/login.html to verify.`,
-        'Social Media Screenshot': `Facebook Profile: VIP_INVESTMENTS
-Suspect profile ID: vip_deals_99
-Post url: facebook.com/vip_deals_investments
-Contact phone: +91 98989 89898`,
-        'Call Log': `Incoming call from +91 91234 56789
-Duration: 42 seconds
-Call Time: 15 June 2026, 11:30 AM
-Tower IP Location: 103.45.2.1`
-      };
-
-      const finalOcrText = customText.trim() || defaultTexts[fileType] || "No text could be extracted.";
-      const extracted = runEntityExtraction(finalOcrText);
-
-      const newItem = {
-        id: randomId,
-        caseId: selectedCaseId,
-        fileName: fileName || (selectedFile?.name ?? 'evidence_file'),
+    try {
+      const response = await onUploadEvidence(selectedCaseId, selectedFile, {
         fileType,
-        uploadedAt: new Date().toISOString(),
-        uploadedBy: "Inspector S. Sharma",
-        size: selectedFile ? formatBytes(selectedFile.size) : `${Math.floor(100 + Math.random() * 900)} KB`,
-        ocrLanguage: fileType.toLowerCase().includes('whatsapp') || fileType.toLowerCase().includes('sms') ? "English/Hindi" : "English",
-        ocrConfidence: Math.floor(88 + Math.random() * 11),
-        hash: randomHash,
-        tags: [fileType.toLowerCase().replace(' ', '-'), 'uploaded-forensic'],
-        ocrText: finalOcrText,
-        extractedEntities: extracted
-      };
-
-      onAddEvidence(newItem);
-      onAddAuditLog(`Uploaded and processed evidence ${randomId} for Case ${selectedCaseId}`);
-      setSelectedEvidenceId(randomId);
+        customText: customText.trim()
+      });
+      
+      if (response && response.id) {
+        setSelectedEvidenceId(response.id);
+      }
       
       // Reset
       setFileName('');
@@ -218,8 +170,12 @@ Tower IP Location: 103.45.2.1`
       setSelectedFile(null);
       setFileError('');
       if (fileInputRef.current) fileInputRef.current.value = '';
+    } catch (err) {
+      setFileError(err.message || 'Failed to process evidence file.');
+      console.error(err);
+    } finally {
       setIsProcessing(false);
-    }, 1500);
+    }
   };
 
   // Handle OCR corrections

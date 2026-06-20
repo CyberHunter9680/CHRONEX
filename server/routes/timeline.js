@@ -1,5 +1,6 @@
 import express from 'express';
 import { query } from '../db.js';
+import { authenticateToken, restrictCaseAccess, requireApprovedCase } from '../middlewares/authMiddleware.js';
 
 const router = express.Router();
 
@@ -7,7 +8,7 @@ const router = express.Router();
 // GET /api/timeline/:caseId
 // Get all timeline events for a case (sorted asc)
 // ─────────────────────────────────────────
-router.get('/:caseId', async (req, res) => {
+router.get('/:caseId', authenticateToken, restrictCaseAccess, async (req, res) => {
   try {
     const result = await query(
       'SELECT * FROM timeline_events WHERE case_id = $1',
@@ -25,7 +26,7 @@ router.get('/:caseId', async (req, res) => {
 // POST /api/timeline/:caseId
 // Add a manual timeline event to a case
 // ─────────────────────────────────────────
-router.post('/:caseId', async (req, res) => {
+router.post('/:caseId', authenticateToken, restrictCaseAccess, requireApprovedCase, async (req, res) => {
   try {
     const { timestamp, title, description, created_by, event_type } = req.body;
 
@@ -39,9 +40,11 @@ router.post('/:caseId', async (req, res) => {
       return res.status(404).json({ success: false, error: 'Case not found' });
     }
 
+    const officerName = created_by || req.user.name || req.user.username || 'System';
+
     const result = await query(
       'INSERT INTO timeline_events (case_id, timestamp, title, description, created_by) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-      [req.params.caseId, timestamp, title, description || '', created_by || 'System', event_type || 'manual']
+      [req.params.caseId, timestamp, title, description || '', officerName]
     );
 
     res.json({ success: true, event: result.rows[0] });
@@ -55,7 +58,8 @@ router.post('/:caseId', async (req, res) => {
 // POST /api/timeline/:caseId/reconstruct
 // Auto-reconstruct timeline from evidence OCR + entities
 // ─────────────────────────────────────────
-router.post('/:caseId/reconstruct', async (req, res) => {
+router.post('/:caseId/reconstruct', authenticateToken, restrictCaseAccess, requireApprovedCase, async (req, res) => {
+
   try {
     const caseId = req.params.caseId;
     
@@ -88,7 +92,7 @@ router.post('/:caseId/reconstruct', async (req, res) => {
         case_id: caseId,
         timestamp: evidence.uploaded_at || new Date().toISOString(),
         title: `Evidence Collected: ${evidence.file_name}`,
-        description: `Digital evidence "${evidence.file_name}" (${formatBytes(evidence.file_size)}) was collected and ingested into the system. SHA-256: ${(evidence.sha256_hash || '').substring(0, 16)}...`,
+        description: `Digital evidence "${evidence.file_name}" (${evidence.file_size}) was collected and ingested into the system. SHA-256: ${(evidence.sha256_hash || '').substring(0, 16)}...`,
         created_by: evidence.uploaded_by || 'System'
       });
 
@@ -146,11 +150,10 @@ router.post('/:caseId/reconstruct', async (req, res) => {
   }
 });
 
-// ─────────────────────────────────────────
 // DELETE /api/timeline/:caseId/:eventId
 // Remove a timeline event
 // ─────────────────────────────────────────
-router.delete('/:caseId/:eventId', async (req, res) => {
+router.delete('/:caseId/:eventId', authenticateToken, restrictCaseAccess, requireApprovedCase, async (req, res) => {
   try {
     const result = await query(
       'DELETE FROM timeline_events WHERE id = $1 AND case_id = $2 RETURNING *',
@@ -167,6 +170,7 @@ router.delete('/:caseId/:eventId', async (req, res) => {
     res.status(500).json({ success: false, error: err.message });
   }
 });
+
 
 function formatBytes(bytes) {
   if (!bytes) return '0 B';

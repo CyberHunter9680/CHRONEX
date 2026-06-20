@@ -4,11 +4,16 @@
 CREATE TABLE IF NOT EXISTS users (
     id SERIAL PRIMARY KEY,
     username VARCHAR(100) UNIQUE NOT NULL,
+    email VARCHAR(255) UNIQUE,
     password_hash VARCHAR(255) NOT NULL,
-    role VARCHAR(50) NOT NULL, -- 'Administrator', 'Inspector', 'Analyst', 'Read Only Viewer'
+    role VARCHAR(50) NOT NULL, -- 'SUPER ADMIN', 'SP', 'CYBER CELL INCHARGE', 'INVESTIGATION OFFICER', 'ANALYST', 'READ ONLY VIEWER'
     name VARCHAR(255) NOT NULL,
     badge VARCHAR(100),
     district VARCHAR(255),
+    failed_logins INTEGER DEFAULT 0,
+    locked_until TIMESTAMP WITH TIME ZONE,
+    mfa_secret VARCHAR(255),
+    password_changed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -17,7 +22,7 @@ CREATE TABLE IF NOT EXISTS cases (
     id VARCHAR(50) PRIMARY KEY, -- Format: CX-YYYY-XXXX
     title VARCHAR(255) NOT NULL,
     description TEXT,
-    status VARCHAR(50) NOT NULL DEFAULT 'Open', -- 'Open', 'Under Investigation', 'Pending', 'Closed'
+    status VARCHAR(50) NOT NULL DEFAULT 'Pending Approval', -- 'Pending Approval', 'Under Investigation', 'Rejected', 'Pending Clarification', 'Closed'
     priority VARCHAR(50) NOT NULL DEFAULT 'Medium', -- 'Low', 'Medium', 'High', 'Critical'
     classification VARCHAR(100) NOT NULL, -- e.g. 'Investment Scam', 'Job Fraud', etc.
     victim_name VARCHAR(255) NOT NULL,
@@ -27,6 +32,7 @@ CREATE TABLE IF NOT EXISTS cases (
     victim_occupation VARCHAR(100),
     victim_location VARCHAR(255),
     remarks TEXT,
+    approval_remarks TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     assigned_officer VARCHAR(255),
     assigned_cell VARCHAR(255) DEFAULT 'Noida Cyber Cell (Zone 1)',
@@ -110,6 +116,8 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     id SERIAL PRIMARY KEY,
     timestamp TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     username VARCHAR(255) NOT NULL,
+    role VARCHAR(50),
+    device VARCHAR(255),
     action TEXT NOT NULL,
     ip_address VARCHAR(50) NOT NULL
 );
@@ -131,3 +139,69 @@ CREATE INDEX IF NOT EXISTS idx_entities_value ON entities(entity_value);
 CREATE INDEX IF NOT EXISTS idx_evidence_entities_case ON evidence_entities(case_id);
 CREATE INDEX IF NOT EXISTS idx_timeline_case ON timeline_events(case_id);
 CREATE INDEX IF NOT EXISTS idx_alerts_entity ON alerts(entity_value);
+
+-- 11. Separate Victims table
+CREATE TABLE IF NOT EXISTS victims (
+    id SERIAL PRIMARY KEY,
+    case_id VARCHAR(50) REFERENCES cases(id) ON DELETE CASCADE,
+    name VARCHAR(255) NOT NULL,
+    mobile VARCHAR(50),
+    email VARCHAR(100),
+    address TEXT
+);
+
+-- 12. Historical Cases (Legacy records database)
+CREATE TABLE IF NOT EXISTS historical_cases (
+    id VARCHAR(50) PRIMARY KEY, -- Format: CX-YYYY-OLDXXXX
+    title VARCHAR(255) NOT NULL,
+    description TEXT,
+    category VARCHAR(100),
+    loss_amount NUMERIC(15, 2) DEFAULT 0.00,
+    status VARCHAR(50) DEFAULT 'Closed',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 13. Historical Entities (Legacy intelligence indicators)
+CREATE TABLE IF NOT EXISTS historical_entities (
+    id SERIAL PRIMARY KEY,
+    case_id VARCHAR(50) REFERENCES historical_cases(id) ON DELETE CASCADE,
+    entity_type VARCHAR(100) NOT NULL,
+    entity_value VARCHAR(255) NOT NULL,
+    risk_score VARCHAR(50) DEFAULT 'Medium',
+    details TEXT,
+    UNIQUE (case_id, entity_type, entity_value)
+);
+
+-- 14. Investigation Notes (Persistent timeline logs)
+CREATE TABLE IF NOT EXISTS investigation_notes (
+    id SERIAL PRIMARY KEY,
+    case_id VARCHAR(50) REFERENCES cases(id) ON DELETE CASCADE,
+    timestamp TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    officer VARCHAR(255) NOT NULL,
+    note_text TEXT NOT NULL
+);
+
+-- 15. Lawful OSINT Queries
+CREATE TABLE IF NOT EXISTS osint_queries (
+    id SERIAL PRIMARY KEY,
+    timestamp TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    entity_type VARCHAR(100) NOT NULL,
+    entity_value VARCHAR(255) NOT NULL,
+    query_type VARCHAR(50) NOT NULL,
+    officer VARCHAR(255) NOT NULL
+);
+
+-- 16. Lawful OSINT Query Results
+CREATE TABLE IF NOT EXISTS osint_results (
+    id SERIAL PRIMARY KEY,
+    query_id INTEGER REFERENCES osint_queries(id) ON DELETE CASCADE,
+    timestamp TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    source VARCHAR(100) NOT NULL,
+    result_data JSONB NOT NULL
+);
+
+-- Additional Indexes
+CREATE INDEX IF NOT EXISTS idx_historical_entities_val ON historical_entities(entity_value);
+CREATE INDEX IF NOT EXISTS idx_osint_queries_val ON osint_queries(entity_value);
+CREATE INDEX IF NOT EXISTS idx_investigation_notes_case ON investigation_notes(case_id);
+CREATE INDEX IF NOT EXISTS idx_victims_case ON victims(case_id);

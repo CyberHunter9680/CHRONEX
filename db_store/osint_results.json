@@ -1,0 +1,13 @@
+[
+  {
+    "query_id": 1,
+    "source": "IP Reputation service",
+    "result_data": {
+      "ip": "192.168.1.100",
+      "country": "India",
+      "isp": "Reliance Jio",
+      "risk_score": 15,
+      "is_vpn": false
+    }
+  }
+]

@@ -120,51 +120,89 @@ router.patch('/:id/resolve', async (req, res) => {
 // ─────────────────────────────────────────
 router.post('/run-correlation', async (req, res) => {
   try {
-    const entitiesResult = await query('SELECT * FROM entities', []);
-    const entities = entitiesResult.rows;
-
     const newAlerts = [];
 
-    for (const entity of entities) {
-      // Find all cases linked to this entity
-      const linksResult = await query(
-        'SELECT DISTINCT case_id FROM evidence_entities WHERE entity_id = $1',
-        [entity.id]
-      );
+    // 1. Scan active case entities for overlap
+    const activeResult = await query(`
+      SELECT ee.entity_id, e.entity_type, e.entity_value, e.risk_score, array_remove(array_agg(DISTINCT ee.case_id), NULL) AS cases
+      FROM evidence_entities ee
+      JOIN entities e ON ee.entity_id = e.id
+      GROUP BY ee.entity_id, e.entity_type, e.entity_value, e.risk_score
+      HAVING COUNT(DISTINCT ee.case_id) >= 2
+    `, []);
 
-      const caseIds = linksResult.rows.map(r => r.case_id);
+    for (const match of activeResult.rows) {
+      const caseIds = match.cases || [];
+      const alertId = `CORR-ACTIVE-${match.entity_type.replace(/\s+/g, '')}-${match.entity_id}`;
+      const severity = match.risk_score === 'High' ? 'Critical' : match.risk_score === 'Medium' ? 'High' : 'Medium';
 
-      if (caseIds.length >= 2) {
-        // This entity appears in multiple cases → Generate correlation alert
-        const alertId = `CORR-${entity.entity_type}-${entity.id}`;
-        const severity = entity.risk_score === 'High' ? 'Critical' : entity.risk_score === 'Medium' ? 'High' : 'Medium';
+      await query(`
+        INSERT INTO alerts (id, type, severity, title, description, entity_type, entity_value, cases)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        ON CONFLICT (id) DO UPDATE 
+        SET severity = EXCLUDED.severity, cases = EXCLUDED.cases, description = EXCLUDED.description
+        RETURNING *
+      `, [
+        alertId,
+        'cross_case_correlation',
+        severity,
+        `Cross-Case Match: ${match.entity_type} "${match.entity_value}"`,
+        `Entity ${match.entity_type} with value "${match.entity_value}" has been identified in ${caseIds.length} separate active cases. Risk Level: ${match.risk_score}. This may indicate a common threat actor or coordinated active fraud scheme.`,
+        match.entity_type,
+        match.entity_value,
+        caseIds
+      ]);
 
-        await query(
-          'INSERT INTO alerts (id, type, severity, title, description, entity_type, entity_value, cases) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *',
-          [
-            alertId,
-            'cross_case_correlation',
-            severity,
-            `Cross-Case Match: ${entity.entity_type} "${entity.entity_value}"`,
-            `Entity ${entity.entity_type} with value "${entity.entity_value}" has been identified in ${caseIds.length} separate cases. Risk Level: ${entity.risk_score}. This may indicate a common threat actor or coordinated fraud scheme.`,
-            entity.entity_type,
-            entity.entity_value,
-            JSON.stringify(caseIds)
-          ]
-        );
+      newAlerts.push({
+        type: 'Active Overlap',
+        entity_type: match.entity_type,
+        entity_value: match.entity_value,
+        case_count: caseIds.length,
+        severity
+      });
+    }
 
-        newAlerts.push({
-          entity_type: entity.entity_type,
-          entity_value: entity.entity_value,
-          case_count: caseIds.length,
-          severity
-        });
-      }
+    // 2. Scan active entities against legacy historical database
+    const historicalResult = await query(`
+      SELECT ee.case_id AS active_case_id, he.case_id AS historical_case_id, he.entity_type, he.entity_value, he.risk_score
+      FROM evidence_entities ee
+      JOIN entities e ON ee.entity_id = e.id
+      JOIN historical_entities he ON e.entity_value = he.entity_value AND e.entity_type = he.entity_type
+    `, []);
+
+    for (const match of historicalResult.rows) {
+      const alertId = `CORR-HIST-${match.entity_type.replace(/\s+/g, '')}-${match.active_case_id}-${match.historical_case_id}`;
+      const severity = match.risk_score === 'Critical' ? 'Critical' : match.risk_score === 'High' ? 'High' : 'Medium';
+
+      await query(`
+        INSERT INTO alerts (id, type, severity, title, description, entity_type, entity_value, cases)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        ON CONFLICT (id) DO UPDATE 
+        SET severity = EXCLUDED.severity, cases = EXCLUDED.cases, description = EXCLUDED.description
+        RETURNING *
+      `, [
+        alertId,
+        'historical_correlation',
+        severity,
+        `Legacy Match: ${match.entity_type} "${match.entity_value}"`,
+        `Active case entity ${match.entity_type} with value "${match.entity_value}" matches a legacy record in historical case "${match.historical_case_id}". Legacy Risk Level: ${match.risk_score}. This suggests recurrence of a past fraud ring.`,
+        match.entity_type,
+        match.entity_value,
+        [match.active_case_id, match.historical_case_id]
+      ]);
+
+      newAlerts.push({
+        type: 'Legacy Overlap',
+        entity_type: match.entity_type,
+        entity_value: match.entity_value,
+        case_count: 2,
+        severity
+      });
     }
 
     res.json({
       success: true,
-      message: `Correlation scan complete. ${newAlerts.length} alert(s) generated.`,
+      message: `Correlation scan complete. ${newAlerts.length} alert(s) generated or updated.`,
       new_alerts: newAlerts
     });
   } catch (err) {

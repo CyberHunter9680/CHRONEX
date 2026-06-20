@@ -1,0 +1,53 @@
+[
+  {
+    "id": "E-40101",
+    "case_id": "CX-2026-0401",
+    "file_name": "whatsapp_signal_group.png",
+    "file_type": "WhatsApp Chat",
+    "file_path": "/uploads/CX-2026-0401/whatsapp_signal_group.png",
+    "file_size": "284 KB",
+    "uploaded_by": "Inspector S. Sharma",
+    "sha256_hash": "8f2efcde04847e0984da0f2efcb910f2efcd6b910ab38cda8f2efcde04847e09",
+    "ocr_language": "English/Hindi",
+    "ocr_confidence": 94,
+    "ocr_text": "[10:15 AM] VIP Support: Good morning! Please transfer ₹1,20,000 to our VIP Signal Wallet to start trading.\n[10:16 AM] VIP Support: Send payment directly to our merchant UPI: securepay.mule@okaxis.\n[10:20 AM] Victim Abhishek: Transfer completed successfully. Transaction reference ID is UPI982374829384. Please check.\n[10:22 AM] VIP Support: Thank you. Your trading account is credited. Contact +91 91234 56789 for queries.",
+    "tags": [
+      "whatsapp-chat",
+      "vip-group"
+    ]
+  },
+  {
+    "id": "E-40201",
+    "case_id": "CX-2026-0402",
+    "file_name": "telegram_task_screen.png",
+    "file_type": "Telegram Chat",
+    "file_path": "/uploads/CX-2026-0402/telegram_task_screen.png",
+    "file_size": "420 KB",
+    "uploaded_by": "Inspector S. Sharma",
+    "sha256_hash": "cb910f2efcd6b910ab38cda8f2efcde04847e0984da0f2efcb910f2efcd6b910ab",
+    "ocr_language": "English",
+    "ocr_confidence": 91,
+    "ocr_text": "[18:30] @taskmaster_vip: In order to unlock Task 5 with higher rewards, deposit ₹45,000 to our safe channel.\n[18:32] @taskmaster_vip: Pay to UPI: securepay.mule@okaxis. Send receipt here.\n[18:35] Rohan (Victim): Sent. Please verify fast. I need to withdraw my earnings.\n[18:36] @taskmaster_vip: Transaction verified. Task 5 is unlocked. Contact Support line at +91 98989 89898.",
+    "tags": [
+      "telegram-chat",
+      "task-group"
+    ]
+  },
+  {
+    "id": "E-40301",
+    "case_id": "CX-2026-0403",
+    "file_name": "loan_app_receipt.png",
+    "file_type": "UPI Receipt",
+    "file_path": "/uploads/CX-2026-0403/loan_app_receipt.png",
+    "file_size": "150 KB",
+    "uploaded_by": "Inspector S. Sharma",
+    "sha256_hash": "efcde04847e0984da0f2efcb910f2efcd6b910ab38cda8f2efcde04847e0984da0f",
+    "ocr_language": "English",
+    "ocr_confidence": 98,
+    "ocr_text": "Google Pay Receipt\nDate: 14 June 2026\nTransaction ID: UPI827364829103\nIFSC: ICIC0000888\nAccount Linked: 918273645029\nPaid to: MULE ACCOUNT ASSOCIATES\nUPI ID: securepay.mule@okaxis\nAmount: ₹25,000\nRemarks: Loan closure fees",
+    "tags": [
+      "upi-receipt",
+      "extortion-payment"
+    ]
+  }
+]

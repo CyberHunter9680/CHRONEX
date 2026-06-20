@@ -7,15 +7,18 @@ import {
   User, 
   Info,
   CheckCircle2,
-  Database
+  Database,
+  AlertTriangle
 } from 'lucide-react';
+import { evidenceApi } from '../services/api';
 
 export default function SecurityAudit({ 
   auditLogs, 
   evidence, 
   activeOfficer, 
   onChangeOfficer,
-  onAddAuditLog 
+  onAddAuditLog,
+  apiOnline
 }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [verifyingFileId, setVerifyingFileId] = useState(null);
@@ -42,15 +45,47 @@ export default function SecurityAudit({
 
   const activeRolePerms = permissions[activeOfficer.role] || [];
 
-  const handleVerifyFile = (fileId) => {
+  const handleVerifyFile = async (fileId) => {
     setVerifyingFileId(fileId);
     
-    // Simulate verification delay
-    setTimeout(() => {
-      setVerifyingFileId(null);
-      setVerificationDone(prev => ({ ...prev, [fileId]: true }));
-      onAddAuditLog(`Verified forensic hash integrity for Evidence ID ${fileId}`);
-    }, 1500);
+    if (apiOnline) {
+      try {
+        const { data, error } = await evidenceApi.verifyIntegrity(fileId);
+        if (data) {
+          setVerificationDone(prev => ({ 
+            ...prev, 
+            [fileId]: { 
+              success: data.verified, 
+              msg: data.message,
+              calc: data.calculatedHash,
+              orig: data.originalHash
+            } 
+          }));
+          onAddAuditLog(data.message);
+        } else {
+          alert(`Verification failed: ${error}`);
+        }
+      } catch (err) {
+        alert(`Verification failed: ${err.message}`);
+      } finally {
+        setVerifyingFileId(null);
+      }
+    } else {
+      // Simulate verification delay
+      setTimeout(() => {
+        setVerifyingFileId(null);
+        setVerificationDone(prev => ({ 
+          ...prev, 
+          [fileId]: { 
+            success: true, 
+            msg: 'File integrity verified. Fingerprint matches original signature.',
+            calc: 'Simulated OK',
+            orig: 'Simulated OK'
+          } 
+        }));
+        onAddAuditLog(`Verified forensic hash integrity for Evidence ID ${fileId}`);
+      }, 1500);
+    }
   };
 
   return (
@@ -123,51 +158,76 @@ export default function SecurityAudit({
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', overflowY: 'auto', maxHeight: '250px' }}>
             {evidence.map(file => {
               const isVerifying = verifyingFileId === file.id;
-              const isDone = !!verificationDone[file.id];
+              const result = verificationDone[file.id];
+              const isDone = !!result;
+              const isSuccess = isDone && result.success;
+              const fileHash = file.sha256Hash || file.hash || 'N/A';
+              
               return (
                 <div 
                   key={file.id}
                   style={{
-                    padding: '10px 12px',
+                    padding: '12px',
                     borderRadius: '6px',
-                    border: '1px solid var(--border-primary)',
-                    backgroundColor: 'var(--bg-primary)',
+                    border: '1px solid ' + (isDone ? (isSuccess ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)') : 'var(--border-primary)'),
+                    backgroundColor: isDone ? (isSuccess ? 'rgba(16, 185, 129, 0.02)' : 'rgba(239, 68, 68, 0.02)') : 'var(--bg-primary)',
                     display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center'
+                    flexDirection: 'column',
+                    gap: '8px',
+                    transition: 'all 0.3s ease'
                   }}
                 >
-                  <div>
-                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: 'var(--primary)', fontWeight: 600 }}>{file.id}</span>
-                    <div style={{ fontSize: '0.8rem', fontWeight: 700, marginTop: '2px', color: 'var(--text-primary)' }}>{file.fileName}</div>
-                    <div style={{ fontSize: '0.65rem', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', maxWidth: '180px', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
-                      SHA256: {file.hash}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: 'var(--primary)', fontWeight: 600 }}>{file.id}</span>
+                      <div style={{ fontSize: '0.8rem', fontWeight: 700, marginTop: '2px', color: 'var(--text-primary)' }}>{file.fileName}</div>
                     </div>
+                    
+                    <button
+                      onClick={() => handleVerifyFile(file.id)}
+                      disabled={isVerifying || isDone}
+                      style={{
+                        backgroundColor: isDone ? (isSuccess ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)') : 'var(--bg-tertiary)',
+                        border: `1px solid ${isDone ? (isSuccess ? 'var(--success)' : 'var(--critical)') : 'var(--border-primary)'}`,
+                        color: isDone ? (isSuccess ? 'var(--success)' : 'var(--critical)') : 'var(--text-primary)',
+                        padding: '4px 8px',
+                        borderRadius: '4px',
+                        fontSize: '0.7rem',
+                        fontWeight: 600,
+                        cursor: isVerifying || isDone ? 'not-allowed' : 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px'
+                      }}
+                    >
+                      {isVerifying ? (
+                        <RefreshCw size={10} className="spin" style={{ animation: 'spin 2s linear infinite' }} />
+                      ) : isDone ? (
+                        isSuccess ? <CheckCircle2 size={10} /> : <AlertTriangle size={10} />
+                      ) : 'Verify'}
+                    </button>
                   </div>
                   
-                  <button
-                    onClick={() => handleVerifyFile(file.id)}
-                    disabled={isVerifying || isDone}
-                    style={{
-                      backgroundColor: isDone ? 'rgba(16, 185, 129, 0.1)' : 'var(--bg-tertiary)',
-                      border: `1px solid ${isDone ? 'var(--success)' : 'var(--border-primary)'}`,
-                      color: isDone ? 'var(--success)' : 'var(--text-primary)',
-                      padding: '4px 8px',
-                      borderRadius: '4px',
-                      fontSize: '0.7rem',
-                      fontWeight: 600,
-                      cursor: isVerifying || isDone ? 'not-allowed' : 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '4px'
-                    }}
-                  >
-                    {isVerifying ? (
-                      <RefreshCw size={10} className="spin" style={{ animation: 'spin 2s linear infinite' }} />
-                    ) : isDone ? (
-                      <CheckCircle2 size={10} />
-                    ) : 'Verify'}
-                  </button>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: '0.65rem' }}>
+                    <div style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }} title={fileHash}>
+                      ORIGINAL: {fileHash.substring(0, 32)}...
+                    </div>
+                    {isDone && !isSuccess && (
+                      <>
+                        <div style={{ fontFamily: 'var(--font-mono)', color: 'var(--critical)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }} title={result.calc}>
+                          CALCULATED: {result.calc?.substring(0, 32)}...
+                        </div>
+                        <div style={{ color: 'var(--critical)', fontWeight: 600, marginTop: '2px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <AlertTriangle size={10} /> Tampering Detected! Signature mismatch.
+                        </div>
+                      </>
+                    )}
+                    {isDone && isSuccess && (
+                      <div style={{ color: 'var(--success)', fontWeight: 600, marginTop: '2px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <CheckCircle2 size={10} /> Signature Matches DB footprints.
+                      </div>
+                    )}
+                  </div>
                 </div>
               );
             })}

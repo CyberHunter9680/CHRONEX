@@ -1,0 +1,23 @@
+[
+  {
+    "case_id": "CX-2025-OLD001",
+    "entity_type": "UPI ID",
+    "entity_value": "securepay.mule@okaxis",
+    "risk_score": "Critical",
+    "details": "Core collection address for trading scam."
+  },
+  {
+    "case_id": "CX-2025-OLD001",
+    "entity_type": "Mobile Number",
+    "entity_value": "+91 91234 56789",
+    "risk_score": "High",
+    "details": "Legacy recruiter phone."
+  },
+  {
+    "case_id": "CX-2025-OLD002",
+    "entity_type": "UPI ID",
+    "entity_value": "quickloan.pay@paytm",
+    "risk_score": "High",
+    "details": "Loan recovery account."
+  }
+]

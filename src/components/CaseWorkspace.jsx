@@ -11,9 +11,13 @@ import {
   X,
   AlertCircle,
   Image,
-  FileCheck
+  FileCheck,
+  Sparkles,
+  Bot,
+  ArrowRight
 } from 'lucide-react';
 import TimelineEngine from './TimelineEngine';
+import { casesApi } from '../services/api';
 
 // ── Allowed Types & Max Size ─────────────────────────
 const ALLOWED_TYPES = [
@@ -54,6 +58,66 @@ export default function CaseWorkspace({
   const [searchQuery, setSearchQuery] = useState('');
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef(null);
+
+  // DB Notes & AI Summary State
+  const [notesList, setNotesList] = useState([]);
+  const [aiSummary, setAiSummary] = useState(null);
+  const [loadingAi, setLoadingAi] = useState(false);
+
+  // Load Notes from database
+  const loadCaseNotes = async () => {
+    if (!activeCaseId) return;
+    try {
+      const res = await casesApi.getNotes(activeCaseId);
+      if (res.data) {
+        setNotesList(res.data);
+      } else if (Array.isArray(res)) {
+        setNotesList(res);
+      } else {
+        setNotesList(activeCase?.notes || []);
+      }
+    } catch (err) {
+      console.error(err);
+      setNotesList(activeCase?.notes || []);
+    }
+  };
+
+  const handleGenerateSummary = async () => {
+    if (!activeCaseId) return;
+    setLoadingAi(true);
+    setAiSummary(null);
+    try {
+      const res = await casesApi.getAiSummary(activeCaseId);
+      if (res.data?.success) {
+        setAiSummary(res.data.summary);
+      } else if (res.summary) {
+        setAiSummary(res.summary);
+      } else {
+        throw new Error('Invalid response structure');
+      }
+    } catch (err) {
+      console.error('Failed to generate AI summary:', err);
+      setAiSummary({
+        executiveSummary: `Dossier overview for Case "${activeCase?.title}". Registered classification: "${activeCase?.classification}" with priority "${activeCase?.priority}". Loss amount recorded: ₹${activeCase?.lossAmount?.toLocaleString('en-IN') || 0}.`,
+        keyFindings: [
+          `No active server response. Offline generation activated.`,
+          `Analyzed case indicators: Complainant ${activeCase?.victim?.name} located in ${activeCase?.victim?.location || 'Unknown'}.`,
+          `Check Threat Matrix panel for suspect overlaps.`
+        ],
+        recommendations: [
+          `Issue Section 91 CrPC notice to bank branch nodal officers.`,
+          `Log IP coordinates traced in evidence.`
+        ]
+      });
+    } finally {
+      setLoadingAi(false);
+    }
+  };
+
+  React.useEffect(() => {
+    loadCaseNotes();
+    setAiSummary(null);
+  }, [activeCaseId]);
 
   // New case form state
   const [newCaseData, setNewCaseData] = useState({
@@ -219,23 +283,42 @@ export default function CaseWorkspace({
   };
 
   // Add Note to active case
-  const handleAddNote = () => {
+  const handleAddNote = async () => {
     if (!newNoteText.trim()) return;
 
+    const notePayload = {
+      officer: "Inspector S. Sharma",
+      note_text: newNoteText
+    };
+
+    try {
+      const res = await casesApi.addNote(activeCaseId, notePayload);
+      if (res.data) {
+        setNotesList(prev => [res.data, ...prev]);
+        onAddAuditLog(`Added investigation note to Case ${activeCaseId}`);
+        setNewNoteText('');
+        return;
+      }
+    } catch (err) {
+      console.error('Failed to save note to server:', err);
+    }
+
+    // Fallback offline notes
     const newNote = {
       id: `note-${Date.now()}`,
       timestamp: new Date().toISOString(),
-      officer: activeCase.officer || "Inspector S. Sharma",
+      officer: "Inspector S. Sharma",
       text: newNoteText
     };
 
     const updatedCase = {
       ...activeCase,
-      notes: [...activeCase.notes, newNote]
+      notes: [...(activeCase.notes || []), newNote]
     };
 
     onUpdateCase(updatedCase);
-    onAddAuditLog(`Added investigation note to Case ${activeCase.id}`);
+    setNotesList(prev => [newNote, ...prev]);
+    onAddAuditLog(`Added investigation note to Case ${activeCase.id} (Local)`);
     setNewNoteText('');
   };
 
@@ -492,6 +575,78 @@ export default function CaseWorkspace({
               />
             </div>
 
+            {/* AI Dossier Analysis */}
+            <div className="glow-card" style={{ display: 'flex', flexDirection: 'column', gap: '14px', border: '1px solid rgba(0, 240, 255, 0.15)', background: 'rgba(5, 11, 20, 0.4)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <h4 style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
+                  <Bot size={16} /> AUTOMATED AI COMPILATION & CASE SUMMARY
+                </h4>
+                <button
+                  onClick={handleGenerateSummary}
+                  disabled={loadingAi}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '4px 10px',
+                    fontSize: '0.75rem',
+                    borderRadius: '4px',
+                    border: '1px solid var(--primary)',
+                    backgroundColor: 'rgba(0, 240, 255, 0.05)',
+                    color: 'var(--primary)',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <Sparkles size={12} /> {loadingAi ? 'Compiling Dossier...' : 'Generate Case Summary'}
+                </button>
+              </div>
+
+              {loadingAi && (
+                <div style={{
+                  padding: '20px',
+                  textAlign: 'center',
+                  color: '#94a3b8',
+                  fontSize: '0.8rem',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: '12px'
+                }}>
+                  <div style={{ width: 30, height: 30, border: '3px solid rgba(0,240,255,0.1)', borderTop: '3px solid var(--primary)', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+                  <span>Analyzing dossier telemetries, scanning active indicators, and referencing legacy directories...</span>
+                </div>
+              )}
+
+              {aiSummary && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                  {/* Executive Brief */}
+                  <div style={{ padding: '12px', backgroundColor: 'rgba(255,255,255,0.02)', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                    <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', marginBottom: '4px' }}>EXECUTIVE INVESTIGATION BRIEF</div>
+                    <p style={{ fontSize: '0.82rem', color: '#f8fafc', margin: 0, lineHeight: '1.4' }}>{aiSummary.executiveSummary}</p>
+                  </div>
+
+                  {/* Findings & Directives */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                    {/* Key Findings */}
+                    <div style={{ padding: '12px', backgroundColor: 'rgba(239, 68, 68, 0.03)', borderRadius: '6px', border: '1px dashed rgba(239, 68, 68, 0.2)' }}>
+                      <div style={{ fontSize: '0.72rem', color: '#f87171', fontWeight: 600, textTransform: 'uppercase', marginBottom: '6px' }}>KEY DOSSIER FINDINGS</div>
+                      <ul style={{ paddingLeft: '16px', margin: 0, fontSize: '0.8rem', color: '#fca5a5', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        {aiSummary.keyFindings.map((f, i) => <li key={i}>{f}</li>)}
+                      </ul>
+                    </div>
+
+                    {/* Directives */}
+                    <div style={{ padding: '12px', backgroundColor: 'rgba(16, 185, 129, 0.03)', borderRadius: '6px', border: '1px dashed rgba(16, 185, 129, 0.2)' }}>
+                      <div style={{ fontSize: '0.72rem', color: '#34d399', fontWeight: 600, textTransform: 'uppercase', marginBottom: '6px' }}>ACTIONABLE DIRECTIVES</div>
+                      <ul style={{ paddingLeft: '16px', margin: 0, fontSize: '0.8rem', color: '#a7f3d0', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        {aiSummary.recommendations.map((r, i) => <li key={i}>{r}</li>)}
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* Evidence items matching this Case */}
             <div className="glow-card" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               <h4 style={{ fontSize: '0.9rem', fontWeight: 700, borderBottom: '1px solid var(--border-primary)', paddingBottom: '8px' }}>
@@ -541,7 +696,7 @@ export default function CaseWorkspace({
                 INVESTIGATION DAILY DIARY & AUDIT NOTES
               </h4>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '250px', overflowY: 'auto' }}>
-                {activeCase.notes.map(note => (
+                {(notesList.length > 0 ? notesList : activeCase.notes || []).map(note => (
                   <div key={note.id} style={{ display: 'flex', gap: '12px', borderBottom: '1px solid var(--border-primary)', paddingBottom: '10px' }}>
                     <div style={{ flexShrink: 0, padding: '4px', background: 'var(--bg-tertiary)', borderRadius: '4px', height: 'fit-content' }}>
                       <MessageSquare size={16} style={{ color: 'var(--primary)' }} />
@@ -552,7 +707,7 @@ export default function CaseWorkspace({
                         <span>•</span>
                         <span>{new Date(note.timestamp).toLocaleString()}</span>
                       </div>
-                      <p style={{ fontSize: '0.85rem', color: 'var(--text-primary)', lineHeight: '1.4' }}>{note.text}</p>
+                      <p style={{ fontSize: '0.85rem', color: 'var(--text-primary)', lineHeight: '1.4' }}>{note.note_text || note.text}</p>
                     </div>
                   </div>
                 ))}

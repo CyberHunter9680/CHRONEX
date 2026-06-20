@@ -16,7 +16,11 @@ import entitiesRouter from './routes/entities.js';
 import timelineRouter from './routes/timeline.js';
 import alertsRouter from './routes/alerts.js';
 import reportsRouter from './routes/reports.js';
-import auditRouter from './routes/audit.js';
+import auditRouter, { auditMiddleware } from './routes/audit.js';
+import importsRouter from './routes/imports.js';
+import osintRouter from './routes/osint.js';
+import authRouter from './routes/auth.js';
+
 
 // ─── App Setup ───────────────────────────────────────────────────
 const app = express();
@@ -40,6 +44,9 @@ app.use(cors({
 // ─── Body Parsers ─────────────────────────────────────────────────
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true }));
+
+app.use(auditMiddleware);
+
 
 // ─── Static Evidence Files ────────────────────────────────────────
 const uploadsDir = path.join(__dirname, 'uploads');
@@ -71,6 +78,9 @@ app.use('/api/timeline', timelineRouter);
 app.use('/api/alerts', alertsRouter);
 app.use('/api/reports', reportsRouter);
 app.use('/api/audit', auditRouter);
+app.use('/api/imports', importsRouter);
+app.use('/api/osint', osintRouter);
+app.use('/api/auth', authRouter);
 
 // ─── Health Check ─────────────────────────────────────────────────
 app.get('/api/health', (req, res) => {

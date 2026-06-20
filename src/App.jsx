@@ -14,7 +14,9 @@ import {
   Moon,
   Wifi,
   WifiOff,
-  RefreshCw
+  RefreshCw,
+  Import,
+  Radar
 } from 'lucide-react';
 
 import { 
@@ -44,6 +46,11 @@ import IntelligenceDatabase from './components/IntelligenceDatabase';
 import AlertsCenter from './components/AlertsCenter';
 import ReportGenerator from './components/ReportGenerator';
 import SecurityAudit from './components/SecurityAudit';
+import HistoricalImporter from './components/HistoricalImporter';
+import OsintWorkspace from './components/OsintWorkspace';
+import LoginScreen from './components/LoginScreen';
+import { authApi } from './services/api';
+
 
 // ─── Map API response fields → frontend field names ───────────────
 function normalizeCase(c) {
@@ -199,8 +206,9 @@ export default function App() {
 
   const toggleTheme = () => setTheme(prev => prev === 'dark' ? 'light' : 'dark');
 
-  // ─── Officer Session ──────────────────────────────────────────────
-  const [activeOfficer] = useState({
+  // ─── Officer Session & Secure Auth ────────────────────────────────
+  const [currentUser, setCurrentUser] = useState(null);
+  const [activeOfficer, setActiveOfficer] = useState({
     name: 'Inspector S. Sharma',
     role: 'Investigator',
     badge: 'IPS-89240',
@@ -219,6 +227,92 @@ export default function App() {
     const s = (seconds % 60).toString().padStart(2, '0');
     return `${h}:${m}:${s}`;
   };
+
+  const handleLogout = useCallback(async (reason = '') => {
+    try {
+      await authApi.logout();
+    } catch (e) {
+      console.warn('Logout endpoint failed:', e);
+    }
+    localStorage.removeItem('chronex_token');
+    setCurrentUser(null);
+    if (reason) {
+      alert(reason);
+    }
+  }, []);
+
+  // Fetch session on mount
+  useEffect(() => {
+    const token = localStorage.getItem('chronex_token');
+    if (token) {
+      authApi.getSession().then(res => {
+        if (res.data?.user) {
+          setCurrentUser(res.data.user);
+          setActiveOfficer({
+            name: res.data.user.name,
+            role: res.data.user.role,
+            badge: res.data.user.badge || 'IPS-89240',
+            district: res.data.user.district || 'Noida Cyber Cell'
+          });
+        } else {
+          localStorage.removeItem('chronex_token');
+        }
+      }).catch(() => {
+        localStorage.removeItem('chronex_token');
+      });
+    }
+  }, []);
+
+  // Inactivity Auto-Logout (15 minutes)
+  useEffect(() => {
+    if (!currentUser) return;
+
+    let timeoutId;
+
+    const resetTimer = () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => {
+        handleLogout('Security Session Expired: Closed due to 15 minutes of inactivity.');
+      }, 15 * 60 * 1000);
+    };
+
+    const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'];
+    events.forEach(event => document.addEventListener(event, resetTimer));
+
+    resetTimer();
+
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      events.forEach(event => document.removeEventListener(event, resetTimer));
+    };
+  }, [currentUser, handleLogout]);
+
+  // Tab Authorization Rule Gate
+  const hasTabPermission = (tab, role) => {
+    if (!role) return false;
+    if (role === 'SUPER ADMIN') return true;
+    if (role === 'SP') return true;
+    
+    switch (tab) {
+      case 'dashboard':
+      case 'cases':
+      case 'evidence':
+      case 'link-analysis':
+      case 'entities':
+        return true;
+      case 'historical-importer':
+        return ['CYBER CELL INCHARGE'].includes(role);
+      case 'osint-workspace':
+      case 'alerts':
+      case 'report':
+        return ['CYBER CELL INCHARGE', 'INVESTIGATION OFFICER', 'ANALYST'].includes(role);
+      case 'audit':
+        return false;
+      default:
+        return false;
+    }
+  };
+
 
   // ─── Initial Data Load ────────────────────────────────────────────
   const loadAllData = useCallback(async () => {
@@ -405,9 +499,86 @@ export default function App() {
     });
   }, []);
 
-  const handleUpdateEvidence = useCallback((updatedEvidence) => {
+  const handleUploadEvidence = useCallback(async (caseId, file, meta = {}) => {
+    if (isServerOnline()) {
+      const { data, error } = await evidenceApi.upload(caseId, file, {
+        fileType: meta.fileType,
+        customText: meta.customText,
+        uploadedBy: activeOfficer.name
+      });
+      if (data) {
+        const norm = normalizeEvidence(data);
+        setEvidence(prev => [norm, ...prev]);
+        
+        // Reload alerts and entities to sync backend correlation
+        const [alertsRes, entitiesRes] = await Promise.all([
+          alertsApi.getAll(),
+          entitiesApi.getAll()
+        ]);
+        if (alertsRes.data?.alerts) setAlerts(alertsRes.data.alerts.map(normalizeAlert));
+        if (entitiesRes.data?.entities) setEntities(entitiesRes.data.entities.map(normalizeEntity));
+        
+        handleAddAuditLog(`Secured evidence file ${norm.id} (status: processing) for Case ${caseId}`);
+        return norm;
+      } else {
+        throw new Error(error || 'Failed to upload evidence');
+      }
+    } else {
+      // Offline fallback: run local simulation
+      const randomId = `E-${Math.floor(200 + Math.random() * 800)}`;
+      const randomHash = Array.from({length: 64}, () => Math.floor(Math.random()*16).toString(16)).join('');
+      const norm = {
+        id: randomId,
+        caseId,
+        fileName: file ? file.name : `manual_text_${Date.now()}.txt`,
+        fileType: meta.fileType,
+        uploadedAt: new Date().toISOString(),
+        uploadedBy: activeOfficer.name,
+        fileSize: file ? `${(file.size / 1024).toFixed(1)} KB` : '1 KB',
+        ocrLanguage: 'English',
+        ocrConfidence: 100,
+        sha256Hash: randomHash,
+        tags: [meta.fileType.toLowerCase().replace(' ', '-'), 'secured'],
+        ocrText: meta.customText || 'No OCR text extracted offline.',
+        extractedEntities: { phones: [], upis: [], emails: [], accounts: [], ips: [], amounts: [], urls: [] },
+        filePath: file ? `/uploads/${caseId}/${file.name}` : '',
+        // keep camelCase and snake_case for consistency
+        case_id: caseId,
+        file_name: file ? file.name : `manual_text_${Date.now()}.txt`,
+        file_type: meta.fileType,
+        file_size: file ? `${(file.size / 1024).toFixed(1)} KB` : '1 KB',
+        uploaded_by: activeOfficer.name,
+        sha256_hash: randomHash,
+        ocr_text: meta.customText || 'No OCR text extracted offline.',
+        ocr_confidence: 100,
+        uploaded_at: new Date().toISOString(),
+      };
+      
+      handleAddEvidence(norm);
+      handleAddAuditLog(`Secured offline mock evidence ${randomId} for Case ${caseId}`);
+      return norm;
+    }
+  }, [activeOfficer.name, handleAddEvidence, handleAddAuditLog]);
+
+  const handleUpdateEvidence = useCallback(async (updatedEvidence) => {
+    if (isServerOnline()) {
+      const { data } = await evidenceApi.updateOcr(updatedEvidence.id, updatedEvidence.ocrText, activeOfficer.name);
+      if (data) {
+        const norm = normalizeEvidence(data);
+        setEvidence(prev => prev.map(e => e.id === updatedEvidence.id ? norm : e));
+        
+        // Reload alerts and entities to sync re-correlation
+        const [alertsRes, entitiesRes] = await Promise.all([
+          alertsApi.getAll(),
+          entitiesApi.getAll()
+        ]);
+        if (alertsRes.data?.alerts) setAlerts(alertsRes.data.alerts.map(normalizeAlert));
+        if (entitiesRes.data?.entities) setEntities(entitiesRes.data.entities.map(normalizeEntity));
+        return;
+      }
+    }
     setEvidence(prev => prev.map(e => e.id === updatedEvidence.id ? updatedEvidence : e));
-  }, []);
+  }, [activeOfficer.name]);
 
   // ─── Alert Handlers ───────────────────────────────────────────────
   const handleResolveAlert = useCallback(async (alertId) => {
@@ -466,7 +637,33 @@ export default function App() {
     );
   }
 
+  if (!currentUser) {
+    return <LoginScreen onLoginSuccess={(user) => {
+      setCurrentUser(user);
+      setActiveOfficer({
+        name: user.name,
+        role: user.role,
+        badge: user.badge || 'IPS-89240',
+        district: user.district || 'Noida Cyber Cell'
+      });
+      // Redirect based on role
+      if (user.role === 'SP') {
+        setActiveTab('dashboard');
+      } else if (user.role === 'CYBER CELL INCHARGE') {
+        setActiveTab('dashboard');
+      } else if (user.role === 'INVESTIGATION OFFICER') {
+        setActiveTab('cases');
+      } else if (user.role === 'ANALYST') {
+        setActiveTab('dashboard');
+      } else {
+        setActiveTab('dashboard');
+      }
+      loadAllData();
+    }} />;
+  }
+
   return (
+
     <div className="app-container" data-theme={theme}>
 
       {/* ─── SIDEBAR ─────────────────────────────────────────── */}
@@ -522,12 +719,16 @@ export default function App() {
             { tab: 'dashboard',      icon: <LayoutDashboard size={16} />, label: 'Command Dashboard' },
             { tab: 'cases',          icon: <ShieldAlert size={16} />,     label: 'Cases Dossier' },
             { tab: 'evidence',       icon: <FolderGit size={16} />,       label: 'Evidence Ingest & OCR' },
+            { tab: 'historical-importer', icon: <Import size={16} />,     label: 'Historical Importer' },
+            { tab: 'osint-workspace', icon: <Radar size={16} />,          label: 'OSINT Workspace' },
             { tab: 'link-analysis',  icon: <Share2 size={16} />,          label: 'Link Analysis Canvas' },
             { tab: 'entities',       icon: <Database size={16} />,        label: 'Intelligence Directory' },
             { tab: 'alerts',         icon: <AlertTriangle size={16} />,   label: 'Threat Matrix' },
             { tab: 'report',         icon: <FileText size={16} />,        label: 'Docket Export' },
             { tab: 'audit',          icon: <Lock size={16} />,            label: 'Security Governance' },
-          ].map(({ tab, icon, label }) => (
+          ]
+          .filter(({ tab }) => hasTabPermission(tab, currentUser?.role))
+          .map(({ tab, icon, label }) => (
             <button key={tab} onClick={() => setActiveTab(tab)} style={navStyle(tab)}>
               {icon} {label}
               {tab === 'alerts' && alerts.filter(a => !a.resolved && (a.severity === 'Critical' || a.severity === 'High')).length > 0 && (
@@ -545,6 +746,7 @@ export default function App() {
               )}
             </button>
           ))}
+
         </div>
 
         {/* Profile + Theme Toggle */}
@@ -567,11 +769,28 @@ export default function App() {
             }}>
               <UserCheck size={14} style={{ color: '#10b981' }} />
             </div>
-            <div>
+            <div style={{ flexGrow: 1 }}>
               <div style={{ fontWeight: 700, color: '#f8fafc', fontSize: '0.8rem' }}>{activeOfficer.name}</div>
               <div style={{ fontSize: '0.68rem', color: '#64748b' }}>{activeOfficer.role} • {activeOfficer.badge}</div>
             </div>
+            <button
+              onClick={() => handleLogout()}
+              style={{
+                background: 'rgba(239, 68, 68, 0.1)',
+                border: '1px solid rgba(239, 68, 68, 0.2)',
+                color: '#ef4444',
+                padding: '4px 8px',
+                borderRadius: '4px',
+                fontSize: '0.65rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                textTransform: 'uppercase'
+              }}
+            >
+              Logout
+            </button>
           </div>
+
 
           {/* Session Time */}
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', color: '#64748b' }}>
@@ -602,6 +821,7 @@ export default function App() {
             onNavigate={setActiveTab}
             apiOnline={apiOnline}
             onRefresh={loadAllData}
+            currentUser={currentUser}
           />
         )}
 
@@ -616,6 +836,7 @@ export default function App() {
             onAddAuditLog={handleAddAuditLog}
             onAddEvidence={handleAddEvidence}
             apiOnline={apiOnline}
+            currentUser={currentUser}
           />
         )}
 
@@ -626,6 +847,7 @@ export default function App() {
             onAddEvidence={handleAddEvidence}            onUploadEvidence={handleUploadEvidence}            onUpdateEvidence={handleUpdateEvidence}
             onAddAuditLog={handleAddAuditLog}
             apiOnline={apiOnline}
+            currentUser={currentUser}
           />
         )}
 
@@ -674,9 +896,10 @@ export default function App() {
             entities={entities}
             alerts={alerts}
             apiOnline={apiOnline}
+            currentUser={currentUser}
             onGenerateReport={async (caseId) => {
               if (isServerOnline()) {
-                return reportsApi.generate(caseId, { generated_by: 'Inspector S. Sharma' });
+                return reportsApi.generate(caseId, { generated_by: currentUser?.name || currentUser?.username || 'System' });
               }
               return { data: null, error: 'Backend not available' };
             }}
@@ -688,10 +911,28 @@ export default function App() {
             auditLogs={auditLogs}
             evidence={evidence}
             activeOfficer={activeOfficer}
+            onChangeOfficer={setActiveOfficer}
             onAddAuditLog={handleAddAuditLog}
             apiOnline={apiOnline}
           />
         )}
+
+        {activeTab === 'historical-importer' && (
+          <HistoricalImporter
+            apiOnline={apiOnline}
+            onAddAuditLog={handleAddAuditLog}
+          />
+        )}
+
+        {activeTab === 'osint-workspace' && (
+          <OsintWorkspace
+            apiOnline={apiOnline}
+            activeOfficer={activeOfficer}
+            onAddAuditLog={handleAddAuditLog}
+            currentUser={currentUser}
+          />
+        )}
+
 
       </div>
     </div>

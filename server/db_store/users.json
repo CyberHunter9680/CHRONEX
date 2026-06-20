@@ -1,0 +1,34 @@
+[
+  {
+    "username": "admin",
+    "password_hash": "admin123",
+    "role": "Administrator",
+    "name": "Superintendent K. Raghavan",
+    "badge": "IPS-00109",
+    "district": "State Cyber Cell"
+  },
+  {
+    "username": "inspector",
+    "password_hash": "inspector123",
+    "role": "Inspector",
+    "name": "Inspector S. Sharma",
+    "badge": "IPS-89240",
+    "district": "Noida Cyber Cell"
+  },
+  {
+    "username": "analyst",
+    "password_hash": "analyst123",
+    "role": "Analyst",
+    "name": "Dr. Neha Verma (Forensics)",
+    "badge": "EXP-42890",
+    "district": "District Forensic Lab"
+  },
+  {
+    "username": "viewer",
+    "password_hash": "viewer123",
+    "role": "Read Only Viewer",
+    "name": "Sub-Inspector A. Kumar",
+    "badge": "SI-77301",
+    "district": "Noida Sector-62 PS"
+  }
+]

@@ -1,18 +1,27 @@
 import express from 'express';
 import { query } from '../db.js';
+import { authenticateToken, restrictCaseAccess, requireApprovedCase } from '../middlewares/authMiddleware.js';
 
 const router = express.Router();
 
-// ─────────────────────────────────────────
+
 // GET /api/reports
 // List all generated reports
 // ─────────────────────────────────────────
-router.get('/', async (req, res) => {
+router.get('/', authenticateToken, async (req, res) => {
   try {
     const result = await query('SELECT * FROM reports ORDER BY generated_at DESC', []);
-    res.json({ success: true, reports: result.rows });
+    let rows = result.rows;
+    if (!['SP', 'SUPER ADMIN', 'CYBER CELL INCHARGE'].includes(req.user.role)) {
+      // Filter by assigned cases
+      const casesRes = await query('SELECT * FROM cases WHERE 1=1');
+      const assignedCaseIds = casesRes.rows
+        .filter(c => c.assigned_officer === req.user.name || c.assigned_officer === req.user.username)
+        .map(c => c.id);
+      rows = rows.filter(r => assignedCaseIds.includes(r.case_id));
+    }
+    res.json({ success: true, reports: rows });
   } catch (err) {
-    // If reports table doesn't exist, return empty
     res.json({ success: true, reports: [] });
   }
 });
@@ -21,16 +30,18 @@ router.get('/', async (req, res) => {
 // POST /api/reports/generate/:caseId
 // Generate a comprehensive investigation dossier for a case
 // ─────────────────────────────────────────
-router.post('/generate/:caseId', async (req, res) => {
+router.post('/generate/:caseId', authenticateToken, restrictCaseAccess, requireApprovedCase, async (req, res) => {
   try {
     const caseId = req.params.caseId;
-    const { generated_by, format } = req.body;
+    const generatedBy = req.user.name || req.user.username || 'System';
+    const { format } = req.body;
 
     // 1. Fetch case details
     const caseResult = await query('SELECT * FROM cases WHERE id = $1', [caseId]);
     if (caseResult.rowCount === 0) {
       return res.status(404).json({ success: false, error: 'Case not found' });
     }
+
     const caseData = caseResult.rows[0];
 
     // 2. Fetch all evidence
@@ -79,7 +90,7 @@ router.post('/generate/:caseId', async (req, res) => {
     const report = {
       report_id: reportId,
       generated_at: reportGeneratedAt,
-      generated_by: generated_by || 'System',
+      generated_by: generatedBy || 'System',
       format: format || 'json',
 
       // ── HEADER ──
@@ -89,8 +100,9 @@ router.post('/generate/:caseId', async (req, res) => {
         report_title: `Investigation Dossier - ${caseId}`,
         classification: caseData.classification || 'CONFIDENTIAL',
         generated_at: reportGeneratedAt,
-        generated_by: generated_by || 'System'
+        generated_by: generatedBy || 'System'
       },
+
 
       // ── CASE SUMMARY ──
       case_summary: {
@@ -192,48 +204,88 @@ router.post('/generate/:caseId', async (req, res) => {
   }
 });
 
-// ─────────────────────────────────────────
 // GET /api/reports/dashboard-stats
 // Platform-wide statistics for dashboard
 // ─────────────────────────────────────────
-router.get('/dashboard-stats', async (req, res) => {
+router.get('/dashboard-stats', authenticateToken, async (req, res) => {
   try {
-    const [casesResult, evidenceResult, entitiesResult, alertsResult] = await Promise.all([
-      query('SELECT * FROM cases', []),
-      query('SELECT COUNT(*) FROM evidence', []),
-      query('SELECT * FROM entities', []),
-      query('SELECT * FROM alerts', [])
-    ]);
+    // Fetch raw data
+    const casesRes = await query('SELECT * FROM cases WHERE 1=1');
+    const evidenceRes = await query('SELECT * FROM evidence ORDER BY uploaded_at DESC');
+    const entitiesRes = await query('SELECT * FROM entities');
+    const alertsRes = await query('SELECT * FROM alerts');
 
-    const cases = casesResult.rows;
-    const entities = entitiesResult.rows;
-    const alerts = alertsResult.rows;
-    const evidenceCount = parseInt(evidenceResult.rows[0]?.count || 0);
+    let cases = casesRes.rows;
+    let evidence = evidenceRes.rows;
+    let entities = entitiesRes.rows;
+    let alerts = alertsRes.rows;
+
+    // Filter by role if not SP/Admin/Incharge
+    const isSPOrAdmin = ['SP', 'SUPER ADMIN', 'CYBER CELL INCHARGE'].includes(req.user.role);
+    if (!isSPOrAdmin) {
+      cases = cases.filter(c => c.assigned_officer === req.user.name || c.assigned_officer === req.user.username);
+      const caseIds = cases.map(c => c.id);
+      evidence = evidence.filter(e => caseIds.includes(e.case_id));
+      
+      // Filter alerts based on active case IDs
+      alerts = alerts.filter(a => {
+        try {
+          const alertCases = typeof a.cases === 'string' ? JSON.parse(a.cases) : (a.cases || []);
+          return alertCases.some(id => caseIds.includes(id));
+        } catch { return false; }
+      });
+      
+      // Filter entities: only entities associated with the user's cases' evidence
+      const eeRes = await query('SELECT * FROM evidence_entities');
+      const linkedEntityIds = eeRes.rows
+        .filter(link => caseIds.includes(link.case_id))
+        .map(link => link.entity_id);
+      
+      entities = entities.filter(ent => linkedEntityIds.includes(ent.id));
+    }
+
+    // Now calculate stats on the filtered arrays
+    const total_cases = cases.length;
+    const active_cases = cases.filter(c => c.status === 'Active' || c.status === 'Under Investigation' || c.status === 'Open').length;
+    const closed_cases = cases.filter(c => c.status === 'Closed').length;
+    const critical_cases = cases.filter(c => c.priority === 'Critical').length;
+    const total_loss_amount = cases.reduce((sum, c) => sum + (parseFloat(c.loss_amount) || 0), 0);
+
+    const total_entities = entities.length;
+    const high_risk_entities = entities.filter(e => e.risk_score === 'High' || e.risk_score === 'Critical').length;
+
+    const active_alerts = alerts.filter(a => !a.resolved).length;
+    const critical_alerts = alerts.filter(a => !a.resolved && a.severity === 'Critical').length;
+
+    const cases_by_status = { Active: 0, Closed: 0, 'Under Review': 0, Pending: 0, 'Under Investigation': 0, 'Pending Approval': 0, 'Rejected': 0, 'Pending Clarification': 0 };
+    cases.forEach(c => {
+      cases_by_status[c.status] = (cases_by_status[c.status] || 0) + 1;
+    });
+
+    const cases_by_priority = { Critical: 0, High: 0, Medium: 0, Low: 0 };
+    cases.forEach(c => {
+      cases_by_priority[c.priority] = (cases_by_priority[c.priority] || 0) + 1;
+    });
+
+    // Sort recent cases by created_at desc, limit 5
+    const recent_cases = [...cases]
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+      .slice(0, 5);
 
     const stats = {
-      total_cases: cases.length,
-      active_cases: cases.filter(c => c.status === 'Active').length,
-      closed_cases: cases.filter(c => c.status === 'Closed').length,
-      critical_cases: cases.filter(c => c.priority === 'Critical').length,
-      total_evidence: evidenceCount,
-      total_entities: entities.length,
-      high_risk_entities: entities.filter(e => e.risk_score === 'High').length,
-      active_alerts: alerts.filter(a => !a.resolved).length,
-      critical_alerts: alerts.filter(a => a.severity === 'Critical' && !a.resolved).length,
-      cases_by_status: {
-        Active: cases.filter(c => c.status === 'Active').length,
-        Closed: cases.filter(c => c.status === 'Closed').length,
-        'Under Review': cases.filter(c => c.status === 'Under Review').length,
-        Pending: cases.filter(c => c.status === 'Pending').length
-      },
-      cases_by_priority: {
-        Critical: cases.filter(c => c.priority === 'Critical').length,
-        High: cases.filter(c => c.priority === 'High').length,
-        Medium: cases.filter(c => c.priority === 'Medium').length,
-        Low: cases.filter(c => c.priority === 'Low').length
-      },
-      recent_cases: cases.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 5),
-      total_loss_amount: cases.reduce((sum, c) => sum + (parseFloat(c.loss_amount) || 0), 0)
+      total_cases,
+      active_cases,
+      closed_cases,
+      critical_cases,
+      total_evidence: evidence.length,
+      total_entities,
+      high_risk_entities,
+      active_alerts,
+      critical_alerts,
+      cases_by_status,
+      cases_by_priority,
+      recent_cases,
+      total_loss_amount
     };
 
     res.json({ success: true, stats });

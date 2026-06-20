@@ -5,6 +5,8 @@ import fs from 'fs';
 import crypto from 'crypto';
 import Tesseract from 'tesseract.js';
 import { query } from '../db.js';
+import { authenticateToken, restrictCaseAccess, requireApprovedCase } from '../middlewares/authMiddleware.js';
+
 
 const router = express.Router();
 
@@ -174,14 +176,24 @@ async function registerEntitiesAndCorrelate(evidenceId, caseId, extracted, uploa
 }
 
 // GET /api/evidence - Get evidence list
-router.get('/', async (req, res) => {
+router.get('/', authenticateToken, restrictCaseAccess, async (req, res) => {
   const { caseId } = req.query;
   try {
     let result;
     if (caseId) {
       result = await query('SELECT * FROM evidence WHERE case_id = $1 ORDER BY uploaded_at DESC', [caseId]);
     } else {
-      result = await query('SELECT * FROM evidence ORDER BY uploaded_at DESC');
+      const allEvidenceRes = await query('SELECT * FROM evidence ORDER BY uploaded_at DESC');
+      let rows = allEvidenceRes.rows;
+      if (!['SP', 'SUPER ADMIN', 'CYBER CELL INCHARGE'].includes(req.user.role)) {
+        // Filter by assigned cases
+        const casesRes = await query('SELECT * FROM cases WHERE 1=1');
+        const assignedCaseIds = casesRes.rows
+          .filter(c => c.assigned_officer === req.user.name || c.assigned_officer === req.user.username)
+          .map(c => c.id);
+        rows = rows.filter(e => assignedCaseIds.includes(e.case_id));
+      }
+      return res.json(rows);
     }
     res.json(result.rows);
   } catch (err) {
@@ -191,9 +203,10 @@ router.get('/', async (req, res) => {
 });
 
 // POST /api/evidence/upload - Upload evidence file
-router.post('/upload', upload.single('file'), async (req, res) => {
+router.post('/upload', authenticateToken, restrictCaseAccess, requireApprovedCase, upload.single('file'), async (req, res) => {
   const { caseId, fileType, customText } = req.body;
-  const username = req.headers['x-officer-name'] || 'System/Guest';
+  const username = req.user.name || req.user.username || 'System/Guest';
+
 
   if (!caseId || !fileType) {
     return res.status(400).json({ error: 'Case ID and Evidence Category are required' });
@@ -227,40 +240,26 @@ router.post('/upload', upload.single('file'), async (req, res) => {
     // 1. Compute SHA-256 integrity fingerprint
     const fileHash = crypto.createHash('sha256').update(fileBuffer).digest('hex');
 
-    // 2. Perform OCR Extraction (Tesseract.js for images, fallback for text)
-    let extractedText = customText || '';
-    let ocrConfidence = 100;
-    let ocrLanguage = 'English';
-
-    // If image file and no custom text provided, run local Tesseract OCR
     const ext = path.extname(fileName).toLowerCase();
     const isImage = ['.png', '.jpg', '.jpeg', '.webp'].includes(ext);
 
+    // 2. Setup initial OCR text (will be processed in bg if image and no custom text)
+    let extractedText = customText || '';
+    let ocrConfidence = 100;
+    let ocrLanguage = 'English';
+    let isProcessingBackground = false;
+
     if (isImage && !customText) {
-      console.log(`[CHRONEX OCR] Running Tesseract OCR scanner on: ${fileName}...`);
-      try {
-        const absPath = path.join(process.cwd(), filePath);
-        const ocrResult = await Tesseract.recognize(absPath, 'eng+hin');
-        extractedText = ocrResult.data.text;
-        ocrConfidence = Math.round(ocrResult.data.confidence);
-        ocrLanguage = ocrResult.data.symbols.some(s => s.language === 'hin') ? 'English/Hindi' : 'English';
-        console.log(`[CHRONEX OCR] Completed. Confidence: ${ocrConfidence}%`);
-      } catch (ocrErr) {
-        console.error('[CHRONEX OCR ERROR] Image recognition failed:', ocrErr.message);
-        // Fallback to empty text
-        extractedText = '[OCR scanner failed to run on this image. Please double click to edit and paste text manually.]';
-        ocrConfidence = 0;
-      }
+      extractedText = '[OCR Extraction in progress...]';
+      ocrConfidence = 0;
+      isProcessingBackground = true;
     } else if (!customText) {
-      // Reading simple text/CSV/DOCX mocks
       extractedText = `[File Ingested]\nFile Name: ${fileName}\nForensic signature secured. OCR is not applicable for this file extension. Please edit to add custom transcription text.`;
     }
 
-    // 3. Parse Entities using Regex engine
-    const entitiesParsed = extractEntities(extractedText);
-
-    // 4. Save evidence record to DB
+    // 3. Save evidence record to DB
     const evidenceId = `E-${Math.floor(10000 + Math.random() * 90000)}`;
+    const tags = [fileType.toLowerCase().replace(' ', '-'), isProcessingBackground ? 'processing' : 'secured'];
 
     const insertRes = await query(`
       INSERT INTO evidence (
@@ -280,10 +279,10 @@ router.post('/upload', upload.single('file'), async (req, res) => {
       ocrLanguage,
       ocrConfidence,
       extractedText,
-      [fileType.toLowerCase().replace(' ', '-'), 'secured']
+      tags
     ]);
 
-    // 5. Chain of custody entry
+    // 4. Chain of custody entry
     await query(`
       INSERT INTO chain_of_custody (evidence_id, action, handled_by, description)
       VALUES ($1, $2, $3, $4)
@@ -294,8 +293,55 @@ router.post('/upload', upload.single('file'), async (req, res) => {
       `Secured file "${fileName}" (Size: ${fileSize}) under case ${caseId}. SHA-256 Fingerprint: ${fileHash.substring(0, 16)}...`
     ]);
 
-    // 6. Register Entities and trigger Cross-Case Correlation
-    await registerEntitiesAndCorrelate(evidenceId, caseId, entitiesParsed, username);
+    // 5. Trigger background OCR processing or process inline entities
+    if (isProcessingBackground) {
+      // Run OCR in background
+      (async () => {
+        try {
+          console.log(`[CHRONEX OCR BACKGROUND] Starting Tesseract on: ${fileName} (${evidenceId})...`);
+          const absPath = path.join(process.cwd(), filePath);
+          const ocrResult = await Tesseract.recognize(absPath, 'eng+hin');
+          const bgText = ocrResult.data.text || '';
+          const bgConfidence = Math.round(ocrResult.data.confidence);
+          const bgLanguage = ocrResult.data.symbols.some(s => s.language === 'hin') ? 'English/Hindi' : 'English';
+
+          // Update DB
+          await query(`
+            UPDATE evidence
+            SET ocr_text = $1, ocr_confidence = $2, ocr_language = $3, tags = array_replace(tags, 'processing', 'secured')
+            WHERE id = $4
+          `, [bgText, bgConfidence, bgLanguage, evidenceId]);
+
+          // Parse and register entities
+          const bgEntities = extractEntities(bgText);
+          await registerEntitiesAndCorrelate(evidenceId, caseId, bgEntities, username);
+
+          // Log background completion
+          await query(`
+            INSERT INTO chain_of_custody (evidence_id, action, handled_by, description)
+            VALUES ($1, $2, $3, $4)
+          `, [
+            evidenceId,
+            'OCR Processed',
+            'System OCR Engine',
+            `Background OCR finished. Confidence: ${bgConfidence}%. Extracted entities registered.`
+          ]);
+
+          console.log(`[CHRONEX OCR BACKGROUND] Successfully processed: ${evidenceId}`);
+        } catch (bgErr) {
+          console.error(`[CHRONEX OCR BACKGROUND ERROR] Failed for ${evidenceId}:`, bgErr.message);
+          await query(`
+            UPDATE evidence
+            SET ocr_text = $1, ocr_confidence = $2, tags = array_replace(tags, 'processing', 'ocr-failed')
+            WHERE id = $3
+          `, ['[OCR extraction failed. Click to edit transcription text manually.]', 0, evidenceId]);
+        }
+      })();
+    } else {
+      // Process entities immediately for text inputs/fallbacks
+      const entitiesParsed = extractEntities(extractedText);
+      await registerEntitiesAndCorrelate(evidenceId, caseId, entitiesParsed, username);
+    }
 
     res.status(201).json(insertRes.rows[0]);
 
@@ -306,10 +352,10 @@ router.post('/upload', upload.single('file'), async (req, res) => {
 });
 
 // PUT /api/evidence/:id/ocr - Manually correct OCR text
-router.put('/:id/ocr', async (req, res) => {
+router.put('/:id/ocr', authenticateToken, async (req, res) => {
   const { id } = req.params;
   const { ocrText } = req.body;
-  const username = req.headers['x-officer-name'] || 'System/Guest';
+  const username = req.user.name || req.user.username || 'System/Guest';
 
   if (!ocrText) {
     return res.status(400).json({ error: 'OCR Text is required' });
@@ -322,6 +368,31 @@ router.put('/:id/ocr', async (req, res) => {
     }
 
     const currentEv = evCheck.rows[0];
+    const caseId = currentEv.case_id;
+
+    // Verify restrictCaseAccess and requireApprovedCase logic programmatically
+    const caseRes = await query('SELECT status, assigned_officer FROM cases WHERE id = $1', [caseId]);
+    if (caseRes.rowCount === 0) {
+      return res.status(404).json({ success: false, error: 'Case dossier not found' });
+    }
+    const caseData = caseRes.rows[0];
+    
+    // restrictCaseAccess check
+    if (!['SP', 'SUPER ADMIN', 'CYBER CELL INCHARGE'].includes(req.user.role)) {
+      if (caseData.assigned_officer !== req.user.name && caseData.assigned_officer !== req.user.username) {
+        return res.status(403).json({ success: false, error: 'Access Denied: You are not assigned to this case file.' });
+      }
+    }
+    
+    // requireApprovedCase check
+    if (!['SP', 'SUPER ADMIN'].includes(req.user.role)) {
+      if (caseData.status !== 'Under Investigation' && caseData.status !== 'Closed') {
+        return res.status(403).json({ 
+          success: false, 
+          error: `Investigation Blocked: Case status is "${caseData.status}". Action locked until approved by SP.` 
+        });
+      }
+    }
 
     // Compute updated entities
     const updatedEntities = extractEntities(ocrText);
@@ -357,8 +428,25 @@ router.put('/:id/ocr', async (req, res) => {
 });
 
 // GET /api/evidence/:id/coc - Chain of custody records
-router.get('/:id/coc', async (req, res) => {
+router.get('/:id/coc', authenticateToken, async (req, res) => {
   try {
+    const evCheck = await query('SELECT case_id FROM evidence WHERE id = $1', [req.params.id]);
+    if (evCheck.rowCount === 0) {
+      return res.status(404).json({ error: 'Evidence record not found' });
+    }
+    const caseId = evCheck.rows[0].case_id;
+    
+    // restrictCaseAccess check
+    const caseRes = await query('SELECT assigned_officer FROM cases WHERE id = $1', [caseId]);
+    if (caseRes.rowCount > 0) {
+      const caseData = caseRes.rows[0];
+      if (!['SP', 'SUPER ADMIN', 'CYBER CELL INCHARGE'].includes(req.user.role)) {
+        if (caseData.assigned_officer !== req.user.name && caseData.assigned_officer !== req.user.username) {
+          return res.status(403).json({ success: false, error: 'Access Denied: You are not assigned to this case file.' });
+        }
+      }
+    }
+
     const result = await query('SELECT * FROM chain_of_custody WHERE evidence_id = $1 ORDER BY timestamp DESC', [req.params.id]);
     res.json(result.rows);
   } catch (err) {
@@ -366,5 +454,6 @@ router.get('/:id/coc', async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch chain of custody' });
   }
 });
+
 
 export default router;

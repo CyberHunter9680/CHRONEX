@@ -11,37 +11,37 @@ router.get('/', async (req, res) => {
   try {
     const { search, type, risk } = req.query;
     
-    let sql = 'SELECT * FROM entities WHERE 1=1';
+    let sql = `
+      SELECT e.*, 
+             array_remove(array_agg(DISTINCT ee.case_id), NULL) AS case_ids, 
+             COUNT(DISTINCT ee.evidence_id)::integer AS occurrence_count
+      FROM entities e
+      LEFT JOIN evidence_entities ee ON e.id = ee.entity_id
+      WHERE 1=1
+    `;
     const params = [];
 
     if (search) {
       params.push(`%${search}%`);
-      sql += ` AND (entity_value ILIKE $${params.length} OR entity_type ILIKE $${params.length})`;
+      sql += ` AND (e.entity_value ILIKE $${params.length} OR e.entity_type ILIKE $${params.length})`;
     }
     if (type) {
       params.push(type);
-      sql += ` AND entity_type = $${params.length}`;
+      sql += ` AND e.entity_type = $${params.length}`;
     }
     if (risk) {
       params.push(risk);
-      sql += ` AND risk_score = $${params.length}`;
+      sql += ` AND e.risk_score = $${params.length}`;
     }
 
-    sql += ' ORDER BY entity_type, entity_value';
+    sql += ' GROUP BY e.id ORDER BY e.entity_type, e.entity_value';
 
     const result = await query(sql, params);
 
-    // For each entity, get the cases it appears in
-    const enriched = await Promise.all(result.rows.map(async (entity) => {
-      const linksResult = await query(
-        'SELECT DISTINCT case_id FROM evidence_entities WHERE entity_id = $1',
-        [entity.id]
-      );
-      return {
-        ...entity,
-        case_ids: linksResult.rows.map(r => r.case_id),
-        occurrence_count: linksResult.rowCount
-      };
+    const enriched = result.rows.map(entity => ({
+      ...entity,
+      case_ids: entity.case_ids || [],
+      occurrence_count: parseInt(entity.occurrence_count || 0)
     }));
 
     res.json({ success: true, entities: enriched, total: enriched.length });

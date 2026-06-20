@@ -1,0 +1,23 @@
+[
+  {
+    "case_id": "CX-2026-0401",
+    "name": "Abhishek Vyas",
+    "mobile": "+91 91234 56789",
+    "email": "abhishek.v@gmail.com",
+    "address": "Noida Sector 62"
+  },
+  {
+    "case_id": "CX-2026-0402",
+    "name": "Rohan Mehta",
+    "mobile": "+91 98989 89898",
+    "email": "rohan.mehta@yahoo.com",
+    "address": "Greater Noida"
+  },
+  {
+    "case_id": "CX-2026-0403",
+    "name": "Priya Sharma",
+    "mobile": "+91 88888 77777",
+    "email": "priya22@gmail.com",
+    "address": "Noida Sector 15"
+  }
+]
